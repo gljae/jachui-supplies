@@ -1,0 +1,46 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# build output
+dist/
+dist-ssr/
+build/
+
+# logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# editors
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# env
+.env
+.env.local
+.env.*.local
+
+# test / cache
+coverage/
+.vite/
+*.tsbuildinfo
+
+# 세션 한정 실행 설정 (node 절대경로가 박혀 있어 다른 머신에서 깨진다)
+.claude/launch.json

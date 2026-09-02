@@ -1,0 +1,30 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans:
+    'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI',
+    'Malgun Gothic', sans-serif;
+}
+
+@layer base {
+  html {
+    /* G10 — 모바일 주소창 때문에 100vh가 잘린다 */
+    height: 100dvh;
+  }
+
+  body {
+    @apply bg-neutral-50 text-neutral-900 antialiased;
+    font-family: var(--font-sans);
+    /* G10 — iOS는 16px 미만 입력란에 포커스하면 화면을 확대한다 */
+    font-size: 16px;
+  }
+
+  /* 숫자가 자리마다 흔들리지 않도록 */
+  :where(table, .tabular) {
+    font-variant-numeric: tabular-nums;
+  }
+
+  button {
+    @apply cursor-pointer;
+  }
+}
