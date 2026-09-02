@@ -7,6 +7,7 @@ import { countingUnitOf } from '../lib/units'
 import { useData } from '../state/DataContext'
 import type { Item, Purchase } from '../types'
 import ConfirmModal from './ConfirmModal'
+import { ReceiptThumb } from './ReceiptViewer'
 import { useToast } from './Toast'
 
 export default function PurchaseTimeline({
@@ -203,8 +204,11 @@ function Entry({
         </>
       )}
 
-      {/* Phase 6에서 썸네일로 바뀐다 */}
-      {!purchase.hasReceipt && <p className="mt-2 text-xs text-neutral-400">영수증 없음</p>}
+      {purchase.hasReceipt ? (
+        <ReceiptThumb purchaseId={purchase.id} />
+      ) : (
+        <p className="mt-2 text-xs text-neutral-400">영수증 없음</p>
+      )}
     </li>
   )
 }

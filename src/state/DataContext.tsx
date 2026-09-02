@@ -30,6 +30,8 @@ export interface NewEntry {
   quantity: number
   price: number
   purchaseDate: string
+  /** 압축까지 끝난 영수증. 첨부하지 않았거나 처리에 실패했으면 없다 */
+  receipt?: { blob: Blob; mimeType: string; size: number }
 }
 
 interface DataValue {
@@ -114,10 +116,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
         price: entry.price,
         purchaseDate: entry.purchaseDate,
         depletionDates: [],
-        hasReceipt: false,
+        hasReceipt: entry.receipt != null,
       }
 
-      await putItemWithPurchase(item, purchase)
+      await putItemWithPurchase(
+        item,
+        purchase,
+        entry.receipt ? { purchaseId: purchase.id, ...entry.receipt } : undefined,
+      )
       await reload()
     },
     [items, reload],

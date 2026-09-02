@@ -1,6 +1,8 @@
-import { useMemo, useState } from 'react'
+import { ImagePlus } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { DBError } from '../lib/db'
 import { todayStr } from '../lib/format'
+import { formatBytes, processReceipt } from '../lib/receipt'
 import { ALL_UNITS } from '../lib/units'
 import { useData, type NewEntry } from '../state/DataContext'
 import type { ItemType, Unit } from '../types'
@@ -52,6 +54,7 @@ export default function ItemForm({ onDone }: { onDone: () => void }) {
   const [values, setValues] = useState<Values>(initialValues)
   const [errors, setErrors] = useState<Errors>({})
   const [saving, setSaving] = useState(false)
+  const [receipt, setReceipt] = useState<AttachedReceipt | null>(null)
 
   const today = todayStr()
 
@@ -126,6 +129,7 @@ export default function ItemForm({ onDone }: { onDone: () => void }) {
         quantity: isConsumable ? (parseNumber(values.quantity) as number) : 1,
         price: parseNumber(values.price) as number,
         purchaseDate: values.purchaseDate,
+        receipt: receipt ?? undefined,
       }
       await addEntry(entry)
       onDone()
@@ -274,6 +278,8 @@ export default function ItemForm({ onDone }: { onDone: () => void }) {
         />
       </FormField>
 
+      <ReceiptField receipt={receipt} onChange={setReceipt} />
+
       {errors.submit && (
         <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{errors.submit}</p>
       )}
@@ -286,5 +292,103 @@ export default function ItemForm({ onDone }: { onDone: () => void }) {
         {saving ? '저장 중…' : '저장'}
       </button>
     </form>
+  )
+}
+
+interface AttachedReceipt {
+  blob: Blob
+  mimeType: string
+  size: number
+}
+
+/**
+ * 영수증 첨부. 파일을 고르는 즉시 압축까지 끝내고, 실패하면 첨부만 취소한다.
+ * SPEC 4절 — 어떤 실패도 나머지 입력값을 날리지 않는다.
+ */
+function ReceiptField({
+  receipt,
+  onChange,
+}: {
+  receipt: AttachedReceipt | null
+  onChange: (value: AttachedReceipt | null) => void
+}) {
+  const [notice, setNotice] = useState<string | null>(null)
+  const [working, setWorking] = useState(false)
+  const [preview, setPreview] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!receipt) {
+      setPreview(null)
+      return
+    }
+    const url = URL.createObjectURL(receipt.blob)
+    setPreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [receipt])
+
+  async function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    // 같은 파일을 다시 골라도 change가 오도록 값을 비운다
+    event.target.value = ''
+    if (!file) return
+
+    setWorking(true)
+    setNotice(null)
+    try {
+      const result = await processReceipt(file)
+      if (result.ok) {
+        onChange({ blob: result.blob, mimeType: result.mimeType, size: result.size })
+      } else {
+        onChange(null)
+        setNotice(result.message)
+      }
+    } finally {
+      setWorking(false)
+    }
+  }
+
+  return (
+    <FormField label="영수증" hint={notice ? undefined : '선택 사항 · 10MB 이하'}>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
+        onChange={handleFile}
+        className="hidden"
+      />
+
+      {preview && receipt ? (
+        <div className="flex items-center gap-3">
+          <img
+            src={preview}
+            alt="첨부한 영수증"
+            className="size-16 rounded-lg border border-neutral-200 object-cover"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm text-neutral-600">{formatBytes(receipt.size)}</p>
+            <button
+              type="button"
+              onClick={() => onChange(null)}
+              className="mt-1 min-h-9 text-sm text-red-600"
+            >
+              첨부 취소
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          disabled={working}
+          onClick={() => inputRef.current?.click()}
+          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-neutral-300 text-sm text-neutral-600 disabled:opacity-60"
+        >
+          <ImagePlus size={18} />
+          {working ? '처리 중…' : '영수증 첨부'}
+        </button>
+      )}
+
+      {notice && <p className="mt-1 text-sm text-amber-700">{notice}</p>}
+    </FormField>
   )
 }

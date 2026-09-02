@@ -126,15 +126,26 @@ export const receiptRepo = {
  * 따로 쓰면 품목 저장만 성공하고 이력 저장이 실패했을 때
  * 이력 0건짜리 유령 품목이 목록에 남는다.
  */
-export function putItemWithPurchase(item: Item, purchase: Purchase): Promise<void> {
+export function putItemWithPurchase(
+  item: Item,
+  purchase: Purchase,
+  receipt?: Receipt,
+): Promise<void> {
   return guard('저장하지 못했어요.', async () => {
     const db = await getDB()
-    const tx = db.transaction(['items', 'purchases'], 'readwrite')
-    await Promise.all([
+    const stores: ('items' | 'purchases' | 'receipts')[] = receipt
+      ? ['items', 'purchases', 'receipts']
+      : ['items', 'purchases']
+    const tx = db.transaction(stores, 'readwrite')
+
+    const writes: Promise<unknown>[] = [
       tx.objectStore('items').put(item),
       tx.objectStore('purchases').put(purchase),
-      tx.done,
-    ])
+    ]
+    // 영수증만 따로 쓰면 hasReceipt는 true인데 이미지가 없는 이력이 생길 수 있다
+    if (receipt) writes.push(tx.objectStore('receipts').put(receipt))
+
+    await Promise.all([...writes, tx.done])
   })
 }
 
