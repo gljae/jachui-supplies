@@ -113,6 +113,7 @@ export const purchaseRepo = {
 }
 
 export const receiptRepo = {
+  all: () => guard('영수증을 불러오지 못했어요.', async () => (await getDB()).getAll('receipts')),
   get: (purchaseId: string) =>
     guard('영수증을 불러오지 못했어요.', async () => (await getDB()).get('receipts', purchaseId)),
   put: (receipt: Receipt) =>
@@ -182,6 +183,36 @@ export function deleteItemCascade(itemId: string): Promise<void> {
       tx.objectStore('items').delete(itemId),
       tx.done,
     ])
+  })
+}
+
+/**
+ * 백업 복원. 지우기와 쓰기를 한 트랜잭션에서 끝낸다.
+ *
+ * G2 — clearAll()을 먼저 부르고 따로 쓰면, 쓰는 도중 실패했을 때 기존 데이터도
+ * 새 데이터도 남지 않는다. 사용자가 백업을 복원하려다 가진 걸 전부 잃는다.
+ * 한 트랜잭션이면 중간에 실패해도 통째로 되돌아간다.
+ */
+export function restoreBackup(
+  mode: 'overwrite' | 'merge',
+  data: { items: Item[]; purchases: Purchase[]; receipts: Receipt[] },
+): Promise<void> {
+  return guard('복원하지 못했어요.', async () => {
+    const db = await getDB()
+    const tx = db.transaction(['items', 'purchases', 'receipts'], 'readwrite')
+    const items = tx.objectStore('items')
+    const purchases = tx.objectStore('purchases')
+    const receipts = tx.objectStore('receipts')
+
+    const writes: Promise<unknown>[] = []
+    if (mode === 'overwrite') {
+      writes.push(items.clear(), purchases.clear(), receipts.clear())
+    }
+    for (const item of data.items) writes.push(items.put(item))
+    for (const purchase of data.purchases) writes.push(purchases.put(purchase))
+    for (const receipt of data.receipts) writes.push(receipts.put(receipt))
+
+    await Promise.all([...writes, tx.done])
   })
 }
 
