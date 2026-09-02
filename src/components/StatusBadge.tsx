@@ -14,10 +14,11 @@ export function depletionLabel({ status, daysLeft }: DepletionResult): string {
     case 'collecting':
       return '데이터 수집 중'
     case 'soon':
-      // A13 — 예상일이 지난 경우를 따로 말한다
-      return daysLeft != null && daysLeft < 0
-        ? `${Math.abs(daysLeft)}일 지남`
-        : `약 ${daysLeft}일 후 소진`
+      // A13 — 예상일이 지난 경우와 바로 오늘인 경우를 따로 말한다
+      if (daysLeft == null) return '곧 소진'
+      if (daysLeft < 0) return `${Math.abs(daysLeft)}일 지남`
+      if (daysLeft === 0) return '오늘 소진 예상'
+      return `약 ${daysLeft}일 후 소진`
     case 'ok':
       return `약 ${daysLeft}일 후 소진`
   }

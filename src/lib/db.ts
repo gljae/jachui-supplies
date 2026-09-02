@@ -122,6 +122,23 @@ export const receiptRepo = {
 }
 
 /**
+ * 품목과 이력을 한 트랜잭션에 쓴다.
+ * 따로 쓰면 품목 저장만 성공하고 이력 저장이 실패했을 때
+ * 이력 0건짜리 유령 품목이 목록에 남는다.
+ */
+export function putItemWithPurchase(item: Item, purchase: Purchase): Promise<void> {
+  return guard('저장하지 못했어요.', async () => {
+    const db = await getDB()
+    const tx = db.transaction(['items', 'purchases'], 'readwrite')
+    await Promise.all([
+      tx.objectStore('items').put(item),
+      tx.objectStore('purchases').put(purchase),
+      tx.done,
+    ])
+  })
+}
+
+/**
  * 이력 1건 + 연결된 영수증을 함께 지운다.
  *
  * G5 — 트랜잭션은 await 사이에 자동 커밋된다. 아래 블록 안에서는 IDB 호출만 하고

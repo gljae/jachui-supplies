@@ -15,24 +15,28 @@ export default function FormField({
   children: ReactNode
 }) {
   return (
-    <div>
-      <label className="mb-1 block text-sm font-medium text-neutral-700">
+    // 라벨이 입력을 감싸면 htmlFor/id 없이도 연결된다. 라벨을 탭하면 입력에 포커스가 간다
+    <label className="block">
+      <span className="mb-1 block text-sm font-medium text-neutral-700">
         {label}
         {required && <span className="ml-0.5 text-red-600">*</span>}
-      </label>
+      </span>
       {children}
       {error ? (
-        <p className="mt-1 text-sm text-red-600">{error}</p>
+        <span className="mt-1 block text-sm text-red-600">{error}</span>
       ) : hint ? (
-        <p className="mt-1 text-sm text-neutral-500">{hint}</p>
+        <span className="mt-1 block text-sm text-neutral-500">{hint}</span>
       ) : null}
-    </div>
+    </label>
   )
 }
 
-export const inputClass =
-  'w-full min-h-11 rounded-xl border border-neutral-300 bg-white px-3 text-base ' +
+/** 폭을 직접 정하고 싶을 때 쓰는 기본 스타일. w-full이 붙어 있지 않다 */
+export const controlClass =
+  'min-h-11 rounded-xl border border-neutral-300 bg-white px-3 text-base ' +
   'outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100'
+
+export const inputClass = `w-full ${controlClass}`
 
 export const inputErrorClass =
   'w-full min-h-11 rounded-xl border border-red-400 bg-white px-3 text-base ' +

@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import { useToast } from '../components/Toast'
-import { DBError, itemsRepo, purchaseRepo, requestPersistentStorage } from '../lib/db'
+import { DBError, itemsRepo, purchaseRepo, putItemWithPurchase, requestPersistentStorage } from '../lib/db'
 import type { Item, ItemType, Purchase, Unit } from '../types'
 
 export interface NewEntry {
@@ -101,8 +101,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         hasReceipt: false,
       }
 
-      if (!existing) await itemsRepo.put(item)
-      await purchaseRepo.put(purchase)
+      await putItemWithPurchase(item, purchase)
       await reload()
     },
     [items, reload],

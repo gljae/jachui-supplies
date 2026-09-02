@@ -4,7 +4,7 @@ import { todayStr } from '../lib/format'
 import { ALL_UNITS } from '../lib/units'
 import { useData, type NewEntry } from '../state/DataContext'
 import type { ItemType, Unit } from '../types'
-import FormField, { inputClass, inputErrorClass } from './FormField'
+import FormField, { controlClass, inputClass, inputErrorClass } from './FormField'
 import { useToast } from './Toast'
 
 interface Values {
@@ -226,7 +226,7 @@ export default function ItemForm({ onDone }: { onDone: () => void }) {
               <select
                 value={values.unit}
                 onChange={(e) => set('unit', e.target.value as Unit)}
-                className={`${inputClass} w-20`}
+                className={`${controlClass} w-24`}
               >
                 {ALL_UNITS.map((u) => (
                   <option key={u} value={u}>
