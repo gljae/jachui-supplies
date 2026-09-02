@@ -3,8 +3,17 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { defineConfig } from 'vitest/config'
 
+/** GitHub Pages는 저장소 이름 아래에 놓인다 */
+const BASE = '/jachui-supplies/'
+
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  /**
+   * 빌드할 때는 항상 배포 경로를 쓴다.
+   * 로컬만 루트로 빌드하면 `vite preview`에서 멀쩡하던 것이 배포 후에 깨진다 —
+   * 경로가 틀린 건 배포하고 나서야 보이는 종류의 문제라 미리 맞춰둔다.
+   */
+  base: command === 'build' ? BASE : '/',
   plugins: [
     react(),
     tailwindcss(),
@@ -53,4 +62,4 @@ export default defineConfig({
     include: ['src/**/*.test.ts'],
     environment: 'node',
   },
-})
+}))
