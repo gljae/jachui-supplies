@@ -1,5 +1,6 @@
 import { Package, Plus, Search, SearchX, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import EmptyState from '../components/EmptyState'
 import ItemCard, { cardStats } from '../components/ItemCard'
 import ItemForm from '../components/ItemForm'
@@ -8,8 +9,11 @@ import { CardSkeleton } from '../components/Skeleton'
 import {
   applyFilters,
   EMPTY_FILTERS,
+  filtersFromParams,
   hasActiveFilter,
+  paramsFromState,
   SORT_LABELS,
+  sortFromParams,
   sortRows,
   type Filters,
   type Row,
@@ -27,8 +31,14 @@ const TYPE_CHIPS: { value: ItemType | 'all'; label: string }[] = [
 export default function Home() {
   const { items, purchases, loading } = useData()
   const [sheetOpen, setSheetOpen] = useState(false)
-  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
-  const [sort, setSort] = useState<SortKey>('soon')
+  // 필터·정렬은 주소에 둔다. 상세 화면에 갔다 와도 살아 있어야 한다
+  const [params, setParams] = useSearchParams()
+  const filters = useMemo(() => filtersFromParams(params), [params])
+  const sort = useMemo(() => sortFromParams(params), [params])
+
+  const commit = (nextFilters: Filters, nextSort: SortKey = sort) =>
+    // replace를 쓴다 — 글자를 칠 때마다 히스토리가 쌓이면 뒤로가기가 망가진다
+    setParams(paramsFromState(nextFilters, nextSort), { replace: true })
 
   // 파생값 계산은 한 번만 하고 필터·정렬이 함께 쓴다
   const rows = useMemo<Row[]>(() => {
@@ -49,7 +59,7 @@ export default function Home() {
   const filtering = hasActiveFilter(filters)
 
   function update<K extends keyof Filters>(key: K, value: Filters[K]) {
-    setFilters((prev) => ({ ...prev, [key]: value }))
+    commit({ ...filters, [key]: value })
   }
 
   return (
@@ -118,7 +128,7 @@ export default function Home() {
             <span className="sr-only">정렬 기준</span>
             <select
               value={sort}
-              onChange={(e) => setSort(e.target.value as SortKey)}
+              onChange={(e) => commit(filters, e.target.value as SortKey)}
               className="min-h-11 rounded-lg bg-transparent py-1 pr-1 text-sm text-neutral-700 outline-none"
             >
               {(Object.keys(SORT_LABELS) as SortKey[]).map((key) => (
@@ -156,7 +166,7 @@ export default function Home() {
               description="검색어나 필터를 바꿔보세요."
             />
             <button
-              onClick={() => setFilters(EMPTY_FILTERS)}
+              onClick={() => commit(EMPTY_FILTERS)}
               className="mx-auto flex min-h-11 items-center rounded-xl border border-neutral-300 px-4 text-sm font-medium text-neutral-700"
             >
               필터 초기화

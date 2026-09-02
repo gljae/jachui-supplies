@@ -2,7 +2,18 @@ import { describe, expect, it } from 'vitest'
 import type { CardStats } from '../components/ItemCard'
 import type { Item, ItemType, Purchase } from '../types'
 import type { StockStatus } from './calc'
-import { applyFilters, EMPTY_FILTERS, hasActiveFilter, sortRows, type Row } from './filters'
+import {
+  applyFilters,
+  DEFAULT_SORT,
+  EMPTY_FILTERS,
+  filtersFromParams,
+  hasActiveFilter,
+  paramsFromState,
+  sortFromParams,
+  sortRows,
+  type Filters,
+  type Row,
+} from './filters'
 
 function row(
   name: string,
@@ -147,5 +158,40 @@ describe('필터', () => {
     expect(hasActiveFilter(EMPTY_FILTERS)).toBe(false)
     expect(hasActiveFilter({ ...EMPTY_FILTERS, query: ' ' })).toBe(false)
     expect(hasActiveFilter({ ...EMPTY_FILTERS, soonOnly: true })).toBe(true)
+  })
+})
+
+describe('URL 왕복', () => {
+  it('필터와 정렬을 주소에 넣고 되읽는다', () => {
+    const filters: Filters = {
+      query: '세제',
+      type: 'consumable',
+      category: '생활용품',
+      soonOnly: true,
+    }
+    const params = paramsFromState(filters, 'name')
+    expect(filtersFromParams(params)).toEqual(filters)
+    expect(sortFromParams(params)).toBe('name')
+  })
+
+  it('기본값은 주소에 넣지 않는다', () => {
+    expect(paramsFromState(EMPTY_FILTERS, DEFAULT_SORT).toString()).toBe('')
+  })
+
+  it('빈 주소는 기본 상태로 읽힌다', () => {
+    const params = new URLSearchParams()
+    expect(filtersFromParams(params)).toEqual(EMPTY_FILTERS)
+    expect(sortFromParams(params)).toBe(DEFAULT_SORT)
+  })
+
+  it('주소에서 온 이상한 값은 기본값으로 되돌린다', () => {
+    const params = new URLSearchParams('type=드롭테이블&sort=없는정렬&soon=yes')
+    expect(filtersFromParams(params).type).toBe('all')
+    expect(filtersFromParams(params).soonOnly).toBe(false)
+    expect(sortFromParams(params)).toBe(DEFAULT_SORT)
+  })
+
+  it('공백만 있는 검색어는 주소에 남기지 않는다', () => {
+    expect(paramsFromState({ ...EMPTY_FILTERS, query: '   ' }, DEFAULT_SORT).toString()).toBe('')
   })
 })

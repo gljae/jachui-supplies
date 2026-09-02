@@ -25,6 +25,45 @@ export interface Filters {
 
 export const EMPTY_FILTERS: Filters = { query: '', type: 'all', category: null, soonOnly: false }
 
+export const DEFAULT_SORT: SortKey = 'soon'
+
+const TYPES: (ItemType | 'all')[] = ['all', 'consumable', 'oneTime']
+
+/**
+ * 필터·정렬 상태를 URL에 둔다.
+ *
+ * 컴포넌트 state에 두면 상세 화면에 들어갔다 오는 순간 Home이 다시 마운트되면서
+ * 전부 초기화된다. 목록을 좁혀 항목을 열어보고 돌아오는 게 기본 흐름인데
+ * 그때마다 필터가 풀리면 필터를 쓸 이유가 없어진다.
+ *
+ * 주소에서 온 값은 믿지 않는다 — 모르는 값이면 기본값으로 되돌린다.
+ */
+export function filtersFromParams(params: URLSearchParams): Filters {
+  const type = params.get('type')
+  return {
+    query: params.get('q') ?? '',
+    type: TYPES.includes(type as ItemType | 'all') ? (type as ItemType | 'all') : 'all',
+    category: params.get('cat'),
+    soonOnly: params.get('soon') === '1',
+  }
+}
+
+export function sortFromParams(params: URLSearchParams): SortKey {
+  const sort = params.get('sort')
+  return sort != null && sort in SORT_LABELS ? (sort as SortKey) : DEFAULT_SORT
+}
+
+/** 기본값은 주소에 넣지 않는다. 아무것도 안 건드렸으면 주소도 깨끗하다. */
+export function paramsFromState(filters: Filters, sort: SortKey): URLSearchParams {
+  const params = new URLSearchParams()
+  if (filters.query.trim() !== '') params.set('q', filters.query)
+  if (filters.type !== 'all') params.set('type', filters.type)
+  if (filters.category !== null) params.set('cat', filters.category)
+  if (filters.soonOnly) params.set('soon', '1')
+  if (sort !== DEFAULT_SORT) params.set('sort', sort)
+  return params
+}
+
 export function hasActiveFilter(filters: Filters): boolean {
   return (
     filters.query.trim() !== '' ||
