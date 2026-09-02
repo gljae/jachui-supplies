@@ -1,4 +1,4 @@
-import { AlertTriangle, Download, ShieldCheck, Upload } from 'lucide-react'
+import { AlertTriangle, Download, ShieldCheck, Smartphone, Upload } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import ConfirmModal from '../components/ConfirmModal'
 import { useToast } from '../components/Toast'
@@ -24,6 +24,7 @@ import {
 import { todayStr } from '../lib/format'
 import { formatBytes } from '../lib/receipt'
 import { useData } from '../state/DataContext'
+import { useInstall } from '../state/useInstall'
 
 type Mode = 'overwrite' | 'merge'
 
@@ -274,7 +275,12 @@ export default function Settings() {
   )
 }
 
-/** G2 — 저장소가 언제 사라질 수 있는지 알려준다 */
+/**
+ * G2 — 저장소가 언제 사라질 수 있는지 알리고, 막을 방법을 바로 옆에 둔다.
+ *
+ * 홈 화면에 추가하면 iOS의 7일 삭제에서 벗어나고, 안드로이드에서는 영속 저장소
+ * 승인 조건을 만족시킨다. 경고만 하고 방법을 안 알려주면 아무것도 바뀌지 않는다.
+ */
 function StorageBanner({
   persisted,
   estimate,
@@ -282,7 +288,11 @@ function StorageBanner({
   persisted: boolean | null
   estimate: { usage: number; quota: number } | null
 }) {
-  const safe = persisted === true
+  const install = useInstall()
+  const toast = useToast()
+  const [showSteps, setShowSteps] = useState(false)
+
+  const safe = persisted === true && install.status === 'installed'
 
   return (
     <section
@@ -294,15 +304,18 @@ function StorageBanner({
         ) : (
           <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-600" />
         )}
-        <div className="text-sm">
+        <div className="min-w-0 text-sm">
           <p className={`font-medium ${safe ? 'text-emerald-800' : 'text-amber-900'}`}>
-            {safe ? '저장소가 보호되고 있어요' : '데이터가 지워질 수 있어요'}
+            {safe ? '데이터가 안전하게 보관돼요' : '데이터가 지워질 수 있어요'}
           </p>
           <p className={`mt-1 ${safe ? 'text-emerald-700' : 'text-amber-800'}`}>
             {safe
-              ? '브라우저가 이 앱의 데이터를 함부로 지우지 않아요.'
-              : '아이폰은 7일간 방문이 없으면, 안드로이드는 저장 공간이 부족하면 이 데이터를 지울 수 있어요. 홈 화면에 추가하고 가끔 내보내 두세요.'}
+              ? '홈 화면 앱으로 실행 중이고 브라우저가 이 데이터를 함부로 지우지 않아요.'
+              : install.status === 'installed'
+                ? '홈 화면 앱으로 실행 중이지만 브라우저가 저장소 보호를 아직 승인하지 않았어요. 며칠 더 쓰면 대부분 자동으로 승인돼요.'
+                : '아이폰은 7일간 방문이 없으면, 안드로이드는 저장 공간이 부족하면 이 데이터를 지울 수 있어요. 홈 화면에 추가하면 막을 수 있어요.'}
           </p>
+
           {estimate && (
             <p className="tabular mt-1 text-xs text-neutral-500">
               사용 중 {formatBytes(estimate.usage)}
@@ -311,6 +324,49 @@ function StorageBanner({
           )}
         </div>
       </div>
+
+      {install.status === 'ready' && (
+        <button
+          onClick={async () => {
+            const accepted = await install.install()
+            if (!accepted) toast('설치를 취소했어요. 설정에서 언제든 다시 할 수 있어요.', 'info')
+          }}
+          className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-amber-600 font-medium text-white"
+        >
+          <Smartphone size={18} />
+          홈 화면에 추가
+        </button>
+      )}
+
+      {install.status === 'manual' && (
+        <>
+          <button
+            onClick={() => setShowSteps((v) => !v)}
+            aria-expanded={showSteps}
+            className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-300 font-medium text-amber-900"
+          >
+            <Smartphone size={18} />
+            홈 화면에 추가하는 방법
+          </button>
+          {showSteps && (
+            <ol className="mt-2 list-decimal space-y-1 rounded-lg bg-white/70 p-3 pl-7 text-sm text-amber-900">
+              {install.platform === 'ios' ? (
+                <>
+                  <li>사파리 아래쪽 공유 버튼을 누르세요.</li>
+                  <li>목록에서 "홈 화면에 추가"를 고르세요.</li>
+                  <li>오른쪽 위 "추가"를 누르면 끝이에요.</li>
+                </>
+              ) : (
+                <>
+                  <li>브라우저 메뉴(⋮)를 여세요.</li>
+                  <li>"홈 화면에 추가" 또는 "앱 설치"를 고르세요.</li>
+                  <li>안내에 따라 추가하면 끝이에요.</li>
+                </>
+              )}
+            </ol>
+          )}
+        </>
+      )}
     </section>
   )
 }

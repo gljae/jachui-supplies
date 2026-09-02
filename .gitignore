@@ -44,3 +44,6 @@ coverage/
 
 # 세션 한정 실행 설정 (node 절대경로가 박혀 있어 다른 머신에서 깨진다)
 .claude/launch.json
+
+# vite-plugin-pwa 개발 산출물
+dev-dist/
