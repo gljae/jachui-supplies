@@ -28,6 +28,34 @@ export default function Sheet({
     }
   }, [open, onClose])
 
+  /**
+   * G8 — 모바일에서 시트를 닫는 가장 자연스러운 동작은 뒤로 가기다.
+   * 그대로 두면 화면 자체가 뒤로 넘어가 사용자가 쓰던 입력이 사라진다.
+   *
+   * 히스토리에 표시용 항목을 하나 얹고 뒤로 가기를 받아 시트만 닫는다.
+   * 닫기 버튼으로 닫았을 때는 우리가 넣은 항목을 되돌려 히스토리를 원래대로 남긴다.
+   */
+  useEffect(() => {
+    if (!open) return
+
+    const marker = `sheet-${Date.now()}`
+    window.history.pushState({ sheet: marker }, '')
+
+    let closedByBack = false
+    const onPopState = () => {
+      closedByBack = true
+      onClose()
+    }
+    window.addEventListener('popstate', onPopState)
+
+    return () => {
+      window.removeEventListener('popstate', onPopState)
+      if (!closedByBack && window.history.state?.sheet === marker) {
+        window.history.back()
+      }
+    }
+  }, [open, onClose])
+
   if (!open) return null
 
   return (

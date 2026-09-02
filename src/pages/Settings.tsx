@@ -28,7 +28,7 @@ import { useData } from '../state/DataContext'
 type Mode = 'overwrite' | 'merge'
 
 export default function Settings() {
-  const { items, purchases, persisted, reload } = useData()
+  const { items, purchases, persisted, commit } = useData()
   const toast = useToast()
 
   const [includeReceipts, setIncludeReceipts] = useState(false)
@@ -144,7 +144,7 @@ export default function Settings() {
         })),
       })
 
-      await reload()
+      await commit()
       setPending(null)
       toast(
         `복원했어요 · 품목 ${payload.items.length}개, 이력 ${payload.purchases.length}건`,
@@ -160,7 +160,7 @@ export default function Settings() {
   async function handleReset() {
     try {
       await clearAll()
-      await reload()
+      await commit()
       setResetting(false)
       toast('전체 데이터를 지웠어요.', 'info')
     } catch (error) {

@@ -25,6 +25,7 @@ import {
   type MonthSpend,
 } from '../lib/stats'
 import { useData } from '../state/DataContext'
+import { useToday } from '../state/useToday'
 
 // CVD 분리 ΔE 32.4로 검증한 조합. 상태색(앰버·레드)과는 겹치지 않게 골랐다
 const CONSUMABLE = '#4f46e5' // indigo-600
@@ -35,8 +36,9 @@ const GRID = '#e5e5e5'
 export default function Stats() {
   const { items, purchases, loading } = useData()
 
+  const today = useToday()
+
   const data = useMemo(() => {
-    const today = new Date()
     const thisMonth = todayStr(today).slice(0, 7)
     const months = lastMonths(today, 6)
 
@@ -48,7 +50,7 @@ export default function Stats() {
       byCategory: spendByCategory(purchases, items),
       series: monthlySeries(purchases, months),
     }
-  }, [items, purchases])
+  }, [items, purchases, today])
 
   if (loading) {
     return (

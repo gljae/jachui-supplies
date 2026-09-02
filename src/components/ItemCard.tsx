@@ -1,37 +1,9 @@
 import { Link } from 'react-router-dom'
-import {
-  avgDaysPerUnit,
-  predictDepletion,
-  totalRemaining,
-  totalSpent,
-  type DepletionResult,
-} from '../lib/calc'
+import type { CardStats } from '../lib/cardStats'
 import { formatDate, formatDays, formatKRW } from '../lib/format'
 import type { Item, Purchase } from '../types'
 import StatusBadge from './StatusBadge'
 
-/** 목록 정렬에서도 쓰도록 파생값 계산을 한곳에 모은다. */
-export interface CardStats {
-  remaining: { label: string; count: number }[]
-  avgDays: number | null
-  depletion: DepletionResult
-  latest: Purchase | null
-  spent: number
-}
-
-export function cardStats(purchases: Purchase[], today: Date): CardStats {
-  const latest = purchases.reduce<Purchase | null>(
-    (best, p) => (!best || p.purchaseDate >= best.purchaseDate ? p : best),
-    null,
-  )
-  return {
-    remaining: totalRemaining(purchases),
-    avgDays: avgDaysPerUnit(purchases),
-    depletion: predictDepletion(purchases, today),
-    latest,
-    spent: totalSpent(purchases),
-  }
-}
 
 export default function ItemCard({
   item,

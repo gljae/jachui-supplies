@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -43,6 +44,8 @@ interface DataValue {
   persisted: boolean | null
   purchasesOf: (itemId: string) => Purchase[]
   reload: () => Promise<void>
+  /** 저장소를 직접 바꾼 뒤(복원·초기화) 화면 갱신과 다른 탭 알림을 함께 한다 */
+  commit: () => Promise<void>
   addEntry: (entry: NewEntry) => Promise<void>
   /** "1개 다 썼음" — 남은 개수를 하나 줄이고 오늘을 소진일로 기록한다 */
   depleteOne: (purchaseId: string) => Promise<void>
@@ -52,6 +55,8 @@ interface DataValue {
   removePurchase: (purchaseId: string) => Promise<void>
   removeItem: (itemId: string) => Promise<void>
 }
+
+const CHANNEL = 'jachui-supplies'
 
 const DataContext = createContext<DataValue | null>(null)
 
@@ -83,6 +88,30 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setPersisted(await requestPersistentStorage())
       await reload()
     })()
+  }, [reload])
+
+  /**
+   * G2 — 다른 탭이 데이터를 바꾸면 이 탭의 메모리 캐시는 그대로다.
+   * 한쪽에서 지운 품목이 다른 탭에는 계속 보이고, 그걸 누르면 없는 데이터를 읽는다.
+   * 변경 사실만 주고받고 각 탭이 스스로 다시 읽는다.
+   */
+  const channel = useRef<BroadcastChannel | null>(null)
+
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return
+    const bus = new BroadcastChannel(CHANNEL)
+    bus.onmessage = () => void reload()
+    channel.current = bus
+    return () => {
+      bus.close()
+      channel.current = null
+    }
+  }, [reload])
+
+  /** 변경 후 내 화면을 갱신하고 다른 탭에도 알린다 */
+  const commit = useCallback(async () => {
+    await reload()
+    channel.current?.postMessage('changed')
   }, [reload])
 
   /**
@@ -124,9 +153,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         purchase,
         entry.receipt ? { purchaseId: purchase.id, ...entry.receipt } : undefined,
       )
-      await reload()
+      await commit()
     },
-    [items, reload],
+    [items, commit],
   )
 
   /**
@@ -145,9 +174,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         depletionDates: [...target.depletionDates, todayStr()].sort(),
       }
       await purchaseRepo.put(next)
-      await reload()
+      await commit()
     },
-    [purchases, reload],
+    [purchases, commit],
   )
 
   const undoDepletion = useCallback(
@@ -168,33 +197,33 @@ export function DataProvider({ children }: { children: ReactNode }) {
         remaining: Math.min(target.quantity, target.remaining + 1),
       }
       await purchaseRepo.put(next)
-      await reload()
+      await commit()
     },
-    [purchases, reload],
+    [purchases, commit],
   )
 
   const updateItem = useCallback(
     async (item: Item) => {
       await itemsRepo.put(item)
-      await reload()
+      await commit()
     },
-    [reload],
+    [commit],
   )
 
   const removePurchase = useCallback(
     async (purchaseId: string) => {
       await deletePurchaseCascade(purchaseId)
-      await reload()
+      await commit()
     },
-    [reload],
+    [commit],
   )
 
   const removeItem = useCallback(
     async (itemId: string) => {
       await deleteItemCascade(itemId)
-      await reload()
+      await commit()
     },
-    [reload],
+    [commit],
   )
 
   const purchasesOf = useCallback(
@@ -210,6 +239,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       persisted,
       purchasesOf,
       reload,
+      commit,
       addEntry,
       depleteOne,
       undoDepletion,
@@ -224,6 +254,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       persisted,
       purchasesOf,
       reload,
+      commit,
       addEntry,
       depleteOne,
       undoDepletion,

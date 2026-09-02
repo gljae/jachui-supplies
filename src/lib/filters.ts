@@ -1,4 +1,4 @@
-import type { CardStats } from '../components/ItemCard'
+import type { CardStats } from './cardStats'
 import type { Item, ItemType, Purchase } from '../types'
 
 export type SortKey = 'soon' | 'recent' | 'name' | 'spent'

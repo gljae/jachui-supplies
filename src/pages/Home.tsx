@@ -2,7 +2,8 @@ import { Package, Plus, Search, SearchX, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import EmptyState from '../components/EmptyState'
-import ItemCard, { cardStats } from '../components/ItemCard'
+import ItemCard from '../components/ItemCard'
+import { cardStats } from '../lib/cardStats'
 import ItemForm from '../components/ItemForm'
 import Sheet from '../components/Sheet'
 import { CardSkeleton } from '../components/Skeleton'
@@ -20,6 +21,7 @@ import {
   type SortKey,
 } from '../lib/filters'
 import { useData } from '../state/DataContext'
+import { useToday } from '../state/useToday'
 import type { ItemType } from '../types'
 
 const TYPE_CHIPS: { value: ItemType | 'all'; label: string }[] = [
@@ -41,13 +43,13 @@ export default function Home() {
     setParams(paramsFromState(nextFilters, nextSort), { replace: true })
 
   // 파생값 계산은 한 번만 하고 필터·정렬이 함께 쓴다
+  const today = useToday()
   const rows = useMemo<Row[]>(() => {
-    const today = new Date()
     return items.map((item) => {
       const own = purchases.filter((p) => p.itemId === item.id)
       return { item, purchases: own, stats: cardStats(own, today) }
     })
-  }, [items, purchases])
+  }, [items, purchases, today])
 
   const categories = useMemo(
     () => [...new Set(items.map((i) => i.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko')),
@@ -84,7 +86,7 @@ export default function Home() {
             <button
               onClick={() => update('query', '')}
               aria-label="검색어 지우기"
-              className="absolute top-1/2 right-1 flex size-9 -translate-y-1/2 items-center justify-center rounded-lg text-neutral-400"
+              className="absolute top-1/2 right-0.5 flex size-11 -translate-y-1/2 items-center justify-center rounded-lg text-neutral-400"
             >
               <X size={16} />
             </button>
@@ -93,16 +95,33 @@ export default function Home() {
 
         {/* 칩 줄은 좁은 화면에서 가로 스크롤한다 */}
         <div className="-mx-4 mt-2 flex gap-1.5 overflow-x-auto px-4 pb-1">
-          {TYPE_CHIPS.map((chip) => (
-            <Chip
-              key={chip.value}
-              active={filters.type === chip.value}
-              onClick={() => update('type', chip.value)}
-            >
-              {chip.label}
-            </Chip>
-          ))}
-          <span className="my-1 w-px shrink-0 bg-neutral-200" aria-hidden="true" />
+          {/*
+            타입은 셋 중 하나를 고르는 것이라 붙여서 세그먼트로 보이게 한다.
+            옆의 토글 칩과 생김새가 같으면 "다시 누르면 꺼지겠지" 하고 눌렀다가
+            아무 일도 일어나지 않아 헷갈린다.
+          */}
+          <div
+            role="radiogroup"
+            aria-label="타입"
+            className="flex shrink-0 overflow-hidden rounded-full border border-neutral-300 bg-white"
+          >
+            {TYPE_CHIPS.map((chip) => {
+              const active = filters.type === chip.value
+              return (
+                <button
+                  key={chip.value}
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => update('type', chip.value)}
+                  className={`min-h-11 rounded-full px-3.5 text-sm whitespace-nowrap transition ${
+                    active ? 'bg-indigo-600 text-white' : 'text-neutral-600'
+                  }`}
+                >
+                  {chip.label}
+                </button>
+              )
+            })}
+          </div>
           <Chip active={filters.soonOnly} onClick={() => update('soonOnly', !filters.soonOnly)}>
             소진 임박
           </Chip>

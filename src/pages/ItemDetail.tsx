@@ -20,6 +20,7 @@ import {
 import { DBError } from '../lib/db'
 import { formatDate, formatDays } from '../lib/format'
 import { useData } from '../state/DataContext'
+import { useToday } from '../state/useToday'
 import type { Item } from '../types'
 
 export default function ItemDetail() {
@@ -28,6 +29,7 @@ export default function ItemDetail() {
   const toast = useToast()
   const { items, purchasesOf, loading, updateItem, removeItem } = useData()
 
+  const today = useToday()
   const [mode, setMode] = useState<CycleMode>('perUnit')
   const [editing, setEditing] = useState(false)
   const [confirming, setConfirming] = useState(false)
@@ -41,9 +43,9 @@ export default function ItemDetail() {
       remaining: totalRemaining(purchases),
       interval: avgPurchaseIntervalDays(purchases),
       cycles: cycleOptions(purchases),
-      depletion: predictDepletion(purchases, new Date()),
+      depletion: predictDepletion(purchases, today),
     }
-  }, [item, purchases])
+  }, [item, purchases, today])
 
   // G8 — 첫 로드가 끝나기 전에는 "없는 물품"이라고 단정하지 않는다
   if (loading) {
@@ -168,7 +170,7 @@ export default function ItemDetail() {
                     <button
                       key={option.mode}
                       onClick={() => setMode(option.mode)}
-                      className={`min-h-9 flex-1 rounded-md text-sm font-medium transition ${
+                      className={`min-h-11 flex-1 rounded-md text-sm font-medium transition ${
                         active?.mode === option.mode
                           ? 'bg-white text-neutral-900 shadow-sm'
                           : 'text-neutral-500'

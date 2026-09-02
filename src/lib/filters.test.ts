@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { CardStats } from '../components/ItemCard'
+import type { CardStats } from './cardStats'
 import type { Item, ItemType, Purchase } from '../types'
 import type { StockStatus } from './calc'
 import {
