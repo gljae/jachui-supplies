@@ -107,7 +107,7 @@ describe('2-2 용량당 주기', () => {
 
     expect(perUnit.enabled).toBe(true)
     expect(perUnit.days).toBeCloseTo(22.5) // mean(30, 15)
-    expect(perUnit.label).toBe('개당')
+    expect(perUnit.label).toBe('1개당')
 
     expect(perVolume.enabled).toBe(true)
     expect(perVolume.days).toBeCloseTo(12.5) // 대표가 1L이므로 12.5 × 1

@@ -8,7 +8,16 @@ import {
   type ReactNode,
 } from 'react'
 import { useToast } from '../components/Toast'
-import { DBError, itemsRepo, purchaseRepo, putItemWithPurchase, requestPersistentStorage } from '../lib/db'
+import {
+  DBError,
+  deleteItemCascade,
+  deletePurchaseCascade,
+  itemsRepo,
+  purchaseRepo,
+  putItemWithPurchase,
+  requestPersistentStorage,
+} from '../lib/db'
+import { todayStr } from '../lib/format'
 import type { Item, ItemType, Purchase, Unit } from '../types'
 
 export interface NewEntry {
@@ -33,6 +42,13 @@ interface DataValue {
   purchasesOf: (itemId: string) => Purchase[]
   reload: () => Promise<void>
   addEntry: (entry: NewEntry) => Promise<void>
+  /** "1개 다 썼음" — 남은 개수를 하나 줄이고 오늘을 소진일로 기록한다 */
+  depleteOne: (purchaseId: string) => Promise<void>
+  /** 잘못 누른 소진 기록을 되돌린다 */
+  undoDepletion: (purchaseId: string, date: string) => Promise<void>
+  updateItem: (item: Item) => Promise<void>
+  removePurchase: (purchaseId: string) => Promise<void>
+  removeItem: (itemId: string) => Promise<void>
 }
 
 const DataContext = createContext<DataValue | null>(null)
@@ -107,14 +123,108 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [items, reload],
   )
 
+  /**
+   * G4 — 절대 제자리에서 고치지 않는다.
+   * depletionDates.push()로 배열을 직접 건드리면 참조가 그대로라 리렌더가 일어나지 않고,
+   * 메모리 캐시와 DB가 서로 어긋난 채 남는다. 항상 새 객체를 만들어 저장한다.
+   */
+  const depleteOne = useCallback(
+    async (purchaseId: string) => {
+      const target = purchases.find((p) => p.id === purchaseId)
+      if (!target || target.remaining <= 0) return
+
+      const next: Purchase = {
+        ...target,
+        remaining: Math.max(0, target.remaining - 1),
+        depletionDates: [...target.depletionDates, todayStr()].sort(),
+      }
+      await purchaseRepo.put(next)
+      await reload()
+    },
+    [purchases, reload],
+  )
+
+  const undoDepletion = useCallback(
+    async (purchaseId: string, date: string) => {
+      const target = purchases.find((p) => p.id === purchaseId)
+      if (!target) return
+
+      const index = target.depletionDates.indexOf(date)
+      if (index < 0) return
+
+      const dates = [...target.depletionDates]
+      dates.splice(index, 1)
+
+      const next: Purchase = {
+        ...target,
+        depletionDates: dates,
+        // 되돌린 개수가 구매 개수를 넘지 않게 막는다
+        remaining: Math.min(target.quantity, target.remaining + 1),
+      }
+      await purchaseRepo.put(next)
+      await reload()
+    },
+    [purchases, reload],
+  )
+
+  const updateItem = useCallback(
+    async (item: Item) => {
+      await itemsRepo.put(item)
+      await reload()
+    },
+    [reload],
+  )
+
+  const removePurchase = useCallback(
+    async (purchaseId: string) => {
+      await deletePurchaseCascade(purchaseId)
+      await reload()
+    },
+    [reload],
+  )
+
+  const removeItem = useCallback(
+    async (itemId: string) => {
+      await deleteItemCascade(itemId)
+      await reload()
+    },
+    [reload],
+  )
+
   const purchasesOf = useCallback(
     (itemId: string) => purchases.filter((p) => p.itemId === itemId),
     [purchases],
   )
 
   const value = useMemo(
-    () => ({ items, purchases, loading, persisted, purchasesOf, reload, addEntry }),
-    [items, purchases, loading, persisted, purchasesOf, reload, addEntry],
+    () => ({
+      items,
+      purchases,
+      loading,
+      persisted,
+      purchasesOf,
+      reload,
+      addEntry,
+      depleteOne,
+      undoDepletion,
+      updateItem,
+      removePurchase,
+      removeItem,
+    }),
+    [
+      items,
+      purchases,
+      loading,
+      persisted,
+      purchasesOf,
+      reload,
+      addEntry,
+      depleteOne,
+      undoDepletion,
+      updateItem,
+      removePurchase,
+      removeItem,
+    ],
   )
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>

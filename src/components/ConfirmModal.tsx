@@ -1,0 +1,96 @@
+import { useEffect, useState } from 'react'
+
+/**
+ * 삭제 확인 모달. SPEC 7절 — 삭제는 항상 확인을 거친다.
+ * confirmPhrase를 주면 그 문구를 직접 입력해야 실행된다 (전체 초기화용).
+ */
+export default function ConfirmModal({
+  open,
+  title,
+  message,
+  confirmLabel = '삭제',
+  confirmPhrase,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean
+  title: string
+  message: string
+  confirmLabel?: string
+  confirmPhrase?: string
+  onConfirm: () => void | Promise<void>
+  onCancel: () => void
+}) {
+  const [typed, setTyped] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setTyped('')
+      setBusy(false)
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [open, onCancel])
+
+  if (!open) return null
+
+  const blocked = confirmPhrase != null && typed.trim() !== confirmPhrase
+
+  async function handleConfirm() {
+    setBusy(true)
+    try {
+      await onConfirm()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+      <div className="absolute inset-0 bg-neutral-900/50" onClick={onCancel} aria-hidden="true" />
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-label={title}
+        className="relative w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl"
+      >
+        <h2 className="font-semibold text-neutral-900">{title}</h2>
+        <p className="mt-2 text-sm leading-relaxed text-neutral-600">{message}</p>
+
+        {confirmPhrase != null && (
+          <input
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            placeholder={confirmPhrase}
+            aria-label={`${confirmPhrase} 입력`}
+            className="mt-3 min-h-11 w-full rounded-xl border border-neutral-300 px-3 text-base outline-none focus:border-red-500"
+          />
+        )}
+
+        <div className="mt-5 flex gap-2">
+          <button
+            onClick={onCancel}
+            className="min-h-11 flex-1 rounded-xl border border-neutral-300 font-medium text-neutral-700"
+          >
+            취소
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={blocked || busy}
+            className="min-h-11 flex-1 rounded-xl bg-red-600 font-medium text-white disabled:opacity-50"
+          >
+            {busy ? '처리 중…' : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}

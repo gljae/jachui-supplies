@@ -117,7 +117,7 @@ export function cycleOptions(purchases: Purchase[]): CycleOption[] {
       mode: 'perUnit',
       enabled: perUnitDays != null,
       days: perUnitDays,
-      label: '개당',
+      label: '1개당',
     },
     {
       mode: 'perVolume',
