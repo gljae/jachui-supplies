@@ -37,7 +37,14 @@ export default function ConfirmModal({
       if (e.key === 'Escape') onCancel()
     }
     document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
+    // Sheet와 동일하게 배경 스크롤을 잠근다. 잠그지 않으면 모바일에서
+    // 모달 뒤 화면이 그대로 밀린다
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
   }, [open, onCancel])
 
   if (!open) return null

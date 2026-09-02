@@ -2,7 +2,8 @@ import { ChevronDown, ChevronUp, Trash2, Undo2 } from 'lucide-react'
 import { useState } from 'react'
 import { unitPrice } from '../lib/calc'
 import { DBError } from '../lib/db'
-import { formatDate, formatKRW, formatUnitValue, trimNumber } from '../lib/format'
+import { formatDate, formatKRW, formatUnitValue } from '../lib/format'
+import { countingUnitOf } from '../lib/units'
 import { useData } from '../state/DataContext'
 import type { Item, Purchase } from '../types'
 import ConfirmModal from './ConfirmModal'
@@ -11,20 +12,36 @@ import { useToast } from './Toast'
 export default function PurchaseTimeline({
   item,
   purchases,
+  onItemEmptied,
 }: {
   item: Item
   purchases: Purchase[]
+  /** 마지막 이력을 지워 품목까지 사라졌을 때 (상세 화면을 떠나야 한다) */
+  onItemEmptied: () => void
 }) {
   const [pendingDelete, setPendingDelete] = useState<Purchase | null>(null)
-  const { removePurchase } = useData()
+  const { removePurchase, removeItem } = useData()
   const toast = useToast()
 
-  // 최신순
-  const sorted = [...purchases].sort((a, b) => (a.purchaseDate < b.purchaseDate ? 1 : -1))
+  // 최신순. 같은 날짜면 0을 돌려줘야 한다 — 그러지 않으면 compare(a,b)와 compare(b,a)가
+  // 둘 다 -1이 되어 비교자 계약을 깨고, 같은 날 구매한 이력들의 순서가 정의되지 않는다
+  const sorted = [...purchases].sort((a, b) =>
+    a.purchaseDate === b.purchaseDate ? 0 : a.purchaseDate < b.purchaseDate ? 1 : -1,
+  )
+
+  // 마지막 한 건을 지우면 이력 0건짜리 품목이 남는다. 그 상태는 아무것도 할 수 없는
+  // 막다른 길이라, 품목까지 함께 지우고 모달 문구로 미리 알린다.
+  const isLastOne = purchases.length === 1
 
   async function confirmDelete() {
     if (!pendingDelete) return
     try {
+      if (isLastOne) {
+        await removeItem(item.id)
+        setPendingDelete(null)
+        onItemEmptied()
+        return
+      }
       await removePurchase(pendingDelete.id)
       setPendingDelete(null)
     } catch (error) {
@@ -47,12 +64,15 @@ export default function PurchaseTimeline({
 
       <ConfirmModal
         open={pendingDelete != null}
-        title="이 이력을 삭제할까요?"
+        title={isLastOne ? `"${item.name}"이 함께 사라져요` : '이 이력을 삭제할까요?'}
         message={
           pendingDelete
-            ? `${formatDate(pendingDelete.purchaseDate)} · ${formatKRW(pendingDelete.price)} 기록과 첨부된 영수증이 함께 지워집니다. 되돌릴 수 없어요.`
+            ? isLastOne
+              ? `마지막 남은 이력입니다. 이걸 지우면 "${item.name}" 품목도 함께 사라집니다. 되돌릴 수 없어요.`
+              : `${formatDate(pendingDelete.purchaseDate)} · ${formatKRW(pendingDelete.price)} 기록과 첨부된 영수증이 함께 지워집니다. 되돌릴 수 없어요.`
             : ''
         }
+        confirmLabel={isLastOne ? '품목까지 삭제' : '삭제'}
         onConfirm={confirmDelete}
         onCancel={() => setPendingDelete(null)}
       />
@@ -120,7 +140,13 @@ function Entry({
           <Row label="단위당" value={`${formatKRW(price.value)} / 1${price.unit}`} />
         )}
         {!oneTime && (
-          <Row label="남은 개수" value={depleted ? '소진 완료' : `${purchase.remaining}개`} />
+          <Row
+            label="남은 개수"
+            value={
+              // 헤더가 "3롤"인데 여기만 "1개"라고 하면 안 된다. 세는 단위를 A9와 똑같이 맞춘다
+              depleted ? '소진 완료' : `${purchase.remaining}${countingUnitOf(purchase.unit)}`
+            }
+          />
         )}
       </dl>
 
@@ -192,8 +218,3 @@ function Row({ label, value }: { label: string; value: string }) {
   )
 }
 
-/** 상세 헤더에서도 쓰는 용량 표기 헬퍼 */
-export function volumeSummary(purchase: Purchase): string | null {
-  if (purchase.volume == null || !purchase.unit) return null
-  return `${trimNumber(purchase.volume)}${purchase.unit}`
-}

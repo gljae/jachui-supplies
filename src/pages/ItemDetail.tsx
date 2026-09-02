@@ -132,7 +132,11 @@ export default function ItemDetail() {
               <div className="flex justify-between gap-2">
                 <dt className="text-neutral-500">구매 주기</dt>
                 <dd>
-                  {summary.interval != null ? formatDays(summary.interval) : '이력 2건부터'}
+                  {summary.interval == null
+                    ? '이력 2건부터'
+                    : summary.interval < 1
+                      ? '1일 미만 (같은 날 함께 구매)'
+                      : formatDays(summary.interval)}
                 </dd>
               </div>
               <div className="flex justify-between gap-2">
@@ -185,7 +189,11 @@ export default function ItemDetail() {
           {purchases.length === 0 ? (
             <EmptyState title="이력이 없어요." />
           ) : (
-            <PurchaseTimeline item={item} purchases={purchases} />
+            <PurchaseTimeline
+              item={item}
+              purchases={purchases}
+              onItemEmptied={() => navigate("/", { replace: true })}
+            />
           )}
         </section>
 
