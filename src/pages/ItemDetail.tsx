@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import ConfirmModal from '../components/ConfirmModal'
 import EmptyState from '../components/EmptyState'
 import FormField, { inputClass } from '../components/FormField'
+import PriceChart from '../components/PriceChart'
 import PurchaseTimeline from '../components/PurchaseTimeline'
 import Sheet from '../components/Sheet'
 import Skeleton from '../components/Skeleton'
@@ -181,6 +182,10 @@ export default function ItemDetail() {
             </div>
           </section>
         )}
+
+        <PriceChart purchases={purchases} />
+
+
 
         <section>
           <h2 className="mb-2 text-sm font-semibold text-neutral-900">
