@@ -61,3 +61,31 @@ export function formatDays(days: number): string {
   if (days >= 30) return `${d}일 (약 ${(days / 30.44).toFixed(1)}개월)`
   return `${d}일`
 }
+
+/** 1만 이상은 "1.5만"으로 줄인다. 375px 차트에서 y축이 폭을 많이 먹지 않게 */
+export function compactWon(value: number): string {
+  if (value === 0) return '0'
+  if (value >= 10000) {
+    const man = value / 10000
+    return `${Number.isInteger(man) ? man : man.toFixed(1)}만`
+  }
+  return value.toLocaleString('ko-KR')
+}
+
+/**
+ * 축 눈금을 딱 떨어지는 숫자로 만든다.
+ * recharts에 맡기면 최댓값에서 파생된 5,500 / 1.1만 / 2.2만 같은 값이 나와
+ * 눈금이 제 역할(직접 라벨하지 않은 값을 읽게 하는 것)을 못 한다.
+ */
+export function niceTicks(max: number, intervals = 4): number[] {
+  if (!Number.isFinite(max) || max <= 0) return [0, 1]
+
+  const rough = max / intervals
+  const magnitude = 10 ** Math.floor(Math.log10(rough))
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * magnitude).find((s) => s >= rough) ?? magnitude * 10
+  const top = Math.ceil(max / step) * step
+
+  const ticks: number[] = []
+  for (let value = 0; value <= top + step / 1000; value += step) ticks.push(Math.round(value))
+  return ticks
+}

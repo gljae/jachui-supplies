@@ -4,6 +4,7 @@ import EmptyState from './components/EmptyState'
 import { ToastProvider } from './components/Toast'
 import Home from './pages/Home'
 import ItemDetail from './pages/ItemDetail'
+import Stats from './pages/Stats'
 import { DataProvider } from './state/DataContext'
 
 /** Phase 8·9에서 채운다. 탭이 눌리는 자리를 미리 잡아둔다. */
@@ -25,7 +26,7 @@ export default function App() {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/item/:id" element={<ItemDetail />} />
-              <Route path="/stats" element={<Placeholder title="통계" phase="Phase 8" />} />
+              <Route path="/stats" element={<Stats />} />
               <Route path="/settings" element={<Placeholder title="설정" phase="Phase 9" />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

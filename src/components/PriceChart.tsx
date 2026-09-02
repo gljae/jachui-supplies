@@ -9,7 +9,7 @@ import {
   YAxis,
 } from 'recharts'
 import { unitPrice } from '../lib/calc'
-import { formatKRW, formatShortDate, formatUnitValue } from '../lib/format'
+import { compactWon, formatKRW, formatShortDate, formatUnitValue, niceTicks } from '../lib/format'
 import type { Purchase } from '../types'
 
 const BAR_COLOR = '#4f46e5' // indigo-600 — 단일 계열이므로 한 가지 색만 쓴다
@@ -44,34 +44,6 @@ function build(purchases: Purchase[]): Datum[] {
           p.volume != null && p.unit ? `${formatUnitValue(p.volume, p.unit)} × ${p.quantity}` : '',
       }
     })
-}
-
-/** 1만 이상은 "1.5만"으로 줄인다. 375px에서 y축이 폭을 많이 먹지 않게 */
-function compactWon(value: number): string {
-  if (value === 0) return '0'
-  if (value >= 10000) {
-    const man = value / 10000
-    return `${Number.isInteger(man) ? man : man.toFixed(1)}만`
-  }
-  return value.toLocaleString('ko-KR')
-}
-
-/**
- * y축 눈금을 딱 떨어지는 숫자로 만든다.
- * recharts에 맡기면 최댓값에서 파생된 5,500 / 1.1만 / 2.2만 같은 값이 나와 읽기 어렵다.
- * 위쪽 여백은 막대 위 단가 라벨이 앉을 자리이기도 하다.
- */
-function niceTicks(max: number, intervals = 4): number[] {
-  if (!Number.isFinite(max) || max <= 0) return [0, 1]
-
-  const rough = max / intervals
-  const magnitude = 10 ** Math.floor(Math.log10(rough))
-  const step = [1, 2, 2.5, 5, 10].map((m) => m * magnitude).find((s) => s >= rough) ?? magnitude * 10
-  const top = Math.ceil(max / step) * step
-
-  const ticks: number[] = []
-  for (let value = 0; value <= top + step / 1000; value += step) ticks.push(Math.round(value))
-  return ticks
 }
 
 export default function PriceChart({ purchases }: { purchases: Purchase[] }) {
