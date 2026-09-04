@@ -48,6 +48,7 @@ function row(
   const stats: CardStats = {
     remaining: [],
     avgDays: null,
+    countingUnit: '개',
     depletion: {
       status: over.status ?? 'ok',
       expectedDate: null,

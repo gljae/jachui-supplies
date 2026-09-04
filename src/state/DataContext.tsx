@@ -19,6 +19,7 @@ import {
   requestPersistentStorage,
 } from '../lib/db'
 import { todayStr } from '../lib/format'
+import { totalUnitsOf } from '../lib/units'
 import type { Item, ItemType, Purchase, Unit } from '../types'
 
 export interface NewEntry {
@@ -47,10 +48,10 @@ interface DataValue {
   /** 저장소를 직접 바꾼 뒤(복원·초기화) 화면 갱신과 다른 탭 알림을 함께 한다 */
   commit: () => Promise<void>
   addEntry: (entry: NewEntry) => Promise<void>
-  /** "1개 다 썼음" — 남은 개수를 하나 줄이고 오늘을 소진일로 기록한다 */
-  depleteOne: (purchaseId: string) => Promise<void>
-  /** 잘못 누른 소진 기록을 되돌린다 */
-  undoDepletion: (purchaseId: string, date: string) => Promise<void>
+  /** "N개 사용" — 남은 개수를 그만큼 줄이고 오늘을 소진일로 그 수만큼 기록한다 */
+  deplete: (purchaseId: string, count?: number) => Promise<void>
+  /** 잘못 누른 소진 기록을 되돌린다. 같은 날 여러 개를 썼으면 count로 한 번에 되돌린다 */
+  undoDepletion: (purchaseId: string, date: string, count?: number) => Promise<void>
   updateItem: (item: Item) => Promise<void>
   removePurchase: (purchaseId: string) => Promise<void>
   removeItem: (itemId: string) => Promise<void>
@@ -133,15 +134,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       // A10 — 일회성은 재고 개념이 없다. 수량을 1로 고정하고 소진 이력도 남기지 않는다.
       const quantity = item.type === 'oneTime' ? 1 : entry.quantity
+      const volume = item.type === 'oneTime' ? undefined : entry.volume
+      const unit = item.type === 'oneTime' ? undefined : entry.unit
 
       const purchase: Purchase = {
         id: crypto.randomUUID(),
         itemId: item.id,
         brand: entry.brand?.trim() || undefined,
-        volume: item.type === 'oneTime' ? undefined : entry.volume,
-        unit: item.type === 'oneTime' ? undefined : entry.unit,
+        volume,
+        unit,
         quantity,
-        remaining: quantity,
+        // 남은 개수는 셈 단위로 센다. 6롤짜리 1팩은 1이 아니라 6에서 시작한다
+        remaining: totalUnitsOf({ volume, unit, quantity }),
         price: entry.price,
         purchaseDate: entry.purchaseDate,
         depletionDates: [],
@@ -159,19 +163,26 @@ export function DataProvider({ children }: { children: ReactNode }) {
   )
 
   /**
+   * 소진 기록. 한 번에 여러 개를 써도 같은 날짜를 그 수만큼 넣어 1건 = 1개를 지킨다.
+   *
    * G4 — 절대 제자리에서 고치지 않는다.
    * depletionDates.push()로 배열을 직접 건드리면 참조가 그대로라 리렌더가 일어나지 않고,
    * 메모리 캐시와 DB가 서로 어긋난 채 남는다. 항상 새 객체를 만들어 저장한다.
    */
-  const depleteOne = useCallback(
-    async (purchaseId: string) => {
+  const deplete = useCallback(
+    async (purchaseId: string, count = 1) => {
       const target = purchases.find((p) => p.id === purchaseId)
       if (!target || target.remaining <= 0) return
 
+      // 남은 것보다 많이 쓸 수는 없다. 소수나 NaN이 들어와도 최소 1개는 되게 맞춘다
+      const requested = Number.isFinite(count) ? Math.floor(count) : 1
+      const used = Math.min(Math.max(1, requested), target.remaining)
+      const today = todayStr()
+
       const next: Purchase = {
         ...target,
-        remaining: Math.max(0, target.remaining - 1),
-        depletionDates: [...target.depletionDates, todayStr()].sort(),
+        remaining: target.remaining - used,
+        depletionDates: [...target.depletionDates, ...Array<string>(used).fill(today)].sort(),
       }
       await purchaseRepo.put(next)
       await commit()
@@ -180,21 +191,26 @@ export function DataProvider({ children }: { children: ReactNode }) {
   )
 
   const undoDepletion = useCallback(
-    async (purchaseId: string, date: string) => {
+    async (purchaseId: string, date: string, count = 1) => {
       const target = purchases.find((p) => p.id === purchaseId)
       if (!target) return
 
-      const index = target.depletionDates.indexOf(date)
-      if (index < 0) return
-
       const dates = [...target.depletionDates]
-      dates.splice(index, 1)
+      let removed = 0
+      // 같은 날짜가 여러 번 들어 있을 수 있다. 요청한 수만큼만 걷어낸다
+      for (let i = 0; i < count; i++) {
+        const index = dates.indexOf(date)
+        if (index < 0) break
+        dates.splice(index, 1)
+        removed++
+      }
+      if (removed === 0) return
 
       const next: Purchase = {
         ...target,
         depletionDates: dates,
-        // 되돌린 개수가 구매 개수를 넘지 않게 막는다
-        remaining: Math.min(target.quantity, target.remaining + 1),
+        // 되돌린 개수가 총 개수를 넘지 않게 막는다
+        remaining: Math.min(totalUnitsOf(target), target.remaining + removed),
       }
       await purchaseRepo.put(next)
       await commit()
@@ -241,7 +257,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       reload,
       commit,
       addEntry,
-      depleteOne,
+      deplete,
       undoDepletion,
       updateItem,
       removePurchase,
@@ -256,7 +272,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       reload,
       commit,
       addEntry,
-      depleteOne,
+      deplete,
       undoDepletion,
       updateItem,
       removePurchase,

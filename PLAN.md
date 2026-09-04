@@ -30,6 +30,7 @@ SPEC과 충돌하면 **SPEC이 우선**이며, 이 문서는 SPEC이 비워둔 �
 | A17 | 가격 추이 3건의 **정렬 방향** | 최근 3건을 고른 뒤 x축은 **오래된 → 최신** |
 | A18 | 통화·숫자 포맷 위치 | `lib/format.ts` 신설 (`formatKRW`, `formatDate`, `formatUnitValue`) |
 | A19 | 가져오기 "합치기"의 id 재발급 순서 | items → purchases(`itemId` 재매핑) → receipts(`purchaseId` 재매핑) 순서로 매핑 테이블을 만들며 진행 |
+| A20 | `remaining`을 **무엇의 개수로 셀 것인가** (출시 후 수정, 아래 F절) | count 단위는 낱개로(6롤 1팩 = 6), volume/weight는 포장 개수로(3L 2통 = 2). `unitsPerPack` × `quantity`가 총량이고, A9의 표기 단위와 기준이 같다 |
 
 ### 추가 의존성 (SPEC 목록 외)
 
@@ -482,3 +483,33 @@ const { usage, quota } = await navigator.storage?.estimate?.() ?? {};
 | G3 0 나누기 | `volume: 0` 이력 포함 | 결과에 `Infinity`/`NaN` 없음 |
 | G3 gap 0 | 같은 날 구매+소진 | 정해진 규칙대로(제외 또는 포함) 일관 |
 | G8 null 정렬 | collecting 항목 + soon 항목 | collecting이 항상 뒤 |
+
+---
+
+## H. 출시 후 — 낱개 세기 (저장소 v2)
+
+**증상**: "6롤" 한 팩을 사면 남은 개수가 6롤이 아니라 **1롤**로 보였다. 한 롤만 쓰고
+줄일 방법도 없었다.
+
+**원인**: `remaining`이 포장 개수였다. `quantity=1`이니 1이 맞는 값이었고, A9의 표기 단위만
+'롤'이라 숫자와 단위의 기준이 서로 어긋나 있었다. 두 기준을 맞추는 것이 이 수정의 전부다.
+
+| 바뀐 것 | 내용 |
+|---|---|
+| `remaining` · `depletionDates` | 셈 단위로 센다. 1건 = 1개라, 한 번에 3롤을 쓰면 같은 날짜가 세 번 들어간다 |
+| `usageGaps` 표본 | "1팩당 며칠" → **"셈 단위 1개당 며칠"**. 그래서 `avgDaysPerStandardVolume`은 count 단위에서 용량으로 또 나누지 않는다(`volumeStdPerUnitOf`) |
+| `stockEvents` | 구매 delta가 `quantity` → `totalUnitsOf` |
+| 예상 소진일 | `개봉 시점 + 평균 × **남은 개수**`. 곱하지 않으면 5롤이 남았는데 "곧 소진"이 뜬다 |
+| 소진 액션 | "1개 다 썼음" → `1롤 사용` / `전부 사용` / 수량 직접 입력 `N롤 사용` |
+| 저장소 | v1 → v2. `lib/migrate.ts`가 옮긴다 |
+
+**이전(migration)이 까다로운 지점**: v1의 소진일 1건은 "한 팩을 다 썼다"는 뜻이다. 그 날짜를
+제자리에서 6번 반복하면 "하루에 6롤"이 되어 1개당 평균이 6배로 부푼다. 그래서 그 팩을 쓴
+구간에 6건을 고르게 편다 — 30일에 6롤이면 5일 간격이 되어 원래 사실이 그대로 남는다.
+
+**버전을 올리자마자 드러난 함정**: 탭이 두 개 열려 있으면 한쪽이 v1 연결을 붙잡고 있어
+다른 탭의 업그레이드가 영영 블록된다. `openDB`에 `blocking()`을 달아 versionchange 때
+스스로 연결을 놓게 했다(`db.ts`). `blocked()`만으로는 경고만 찍히고 풀리지 않는다.
+
+백업 파일도 v2로 올렸지만 **v1 파일은 계속 읽는다**(`READABLE_VERSIONS`). 거절하면
+어제 만든 백업이 오늘 쓸모없어진다. 읽으면서 같은 `migrate.ts`를 태운다.

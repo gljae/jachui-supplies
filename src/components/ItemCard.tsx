@@ -51,7 +51,11 @@ export default function ItemCard({
               />
               <Row
                 label="평균 주기"
-                value={stats.avgDays != null ? `1개당 ${formatDays(stats.avgDays)}` : '수집 중'}
+                value={
+                  stats.avgDays != null
+                    ? `1${stats.countingUnit}당 ${formatDays(stats.avgDays)}`
+                    : '수집 중'
+                }
               />
               <Row
                 label="최근 구매가"

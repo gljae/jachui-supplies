@@ -89,3 +89,28 @@ export function countingUnitOf(unit: Unit | undefined): Unit {
   if (!unit) return '개'
   return groupOf(unit) === 'count' ? unit : '개'
 }
+
+/**
+ * 포장 하나에 들어 있는 셈 단위 개수.
+ *
+ * count 단위는 용량이 곧 낱개 수다 — "6롤 1팩"은 6롤이고 롤 단위로 하나씩 쓴다.
+ * volume/weight는 3L를 세 조각으로 뜯어 쓸 수 없으므로 포장 자체가 1개다.
+ */
+export function unitsPerPack(p: Pick<Purchase, 'volume' | 'unit'>): number {
+  if (!p.unit || p.volume == null || groupOf(p.unit) !== 'count') return 1
+  const units = Math.round(p.volume)
+  return Number.isFinite(units) && units > 0 ? units : 1
+}
+
+/** 이력 1건이 담고 있는 총 개수(셈 단위 기준). 6롤 × 2팩 = 12롤, 3L × 2통 = 2개. */
+export function totalUnitsOf(p: Pick<Purchase, 'volume' | 'unit' | 'quantity'>): number {
+  const total = Math.round(p.quantity * unitsPerPack(p))
+  return Number.isFinite(total) && total > 0 ? total : 0
+}
+
+/** 이력들이 공통으로 쓰는 셈 단위. 섞여 있으면 null (라벨을 한 단어로 못 정한다) */
+export function commonCountingUnit(purchases: Purchase[]): Unit | null {
+  const seen = new Set<Unit>()
+  for (const p of purchases) seen.add(countingUnitOf(p.unit))
+  return seen.size === 1 ? [...seen][0] : null
+}

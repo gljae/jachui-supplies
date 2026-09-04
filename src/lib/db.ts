@@ -1,8 +1,16 @@
-import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
+import {
+  openDB,
+  type DBSchema,
+  type IDBPDatabase,
+  type IDBPTransaction,
+  type StoreNames,
+} from 'idb'
 import type { Item, Purchase, Receipt } from '../types'
+import { toCountingUnits } from './migrate'
 
 const DB_NAME = 'jachui-supplies'
-const DB_VERSION = 1
+/** 2 — 남은 개수와 소진일을 포장 단위에서 셈 단위로 옮겼다 (migrate.ts) */
+const DB_VERSION = 2
 
 interface SuppliesDB extends DBSchema {
   items: {
@@ -60,7 +68,7 @@ let dbPromise: Promise<IDBPDatabase<SuppliesDB>> | null = null
 export function getDB(): Promise<IDBPDatabase<SuppliesDB>> {
   if (!dbPromise) {
     dbPromise = openDB<SuppliesDB>(DB_NAME, DB_VERSION, {
-      upgrade(db) {
+      upgrade(db, oldVersion, _newVersion, tx) {
         // G5 — 향후 버전 업그레이드에서 재실행돼도 안전하도록 존재 여부를 확인한다.
         if (!db.objectStoreNames.contains('items')) {
           const items = db.createObjectStore('items', { keyPath: 'id' })
@@ -75,9 +83,24 @@ export function getDB(): Promise<IDBPDatabase<SuppliesDB>> {
         if (!db.objectStoreNames.contains('receipts')) {
           db.createObjectStore('receipts', { keyPath: 'purchaseId' })
         }
+
+        // 갓 만든 저장소(oldVersion 0)에는 옮길 이력이 없다
+        if (oldVersion > 0 && oldVersion < 2) {
+          void toCountingUnitsInPlace(tx).catch((error) => {
+            // 실패하면 versionchange 트랜잭션이 통째로 되돌아가고 openDB가 거절한다.
+            // 반쯤 옮겨진 데이터가 남지는 않으므로 여기서는 흔적만 남긴다
+            console.error('셈 단위 이전에 실패했습니다.', error)
+          })
+        }
       },
       blocked() {
         console.warn('다른 탭이 이전 버전의 DB를 붙잡고 있습니다.')
+      },
+      blocking() {
+        // 다른 탭이 새 버전으로 열려고 한다. 이 연결을 붙잡고 있으면 그 탭은 영영 못 연다.
+        // 버전을 올릴 때마다 실제로 걸리는 함정이라, 놓아주고 다음 호출에서 다시 연다.
+        void dbPromise?.then((db) => db.close()).catch(() => {})
+        dbPromise = null
       },
       terminated() {
         // 브라우저가 연결을 끊으면 다음 호출에서 다시 열도록 캐시를 비운다.
@@ -89,6 +112,24 @@ export function getDB(): Promise<IDBPDatabase<SuppliesDB>> {
     })
   }
   return dbPromise
+}
+
+type UpgradeTx = IDBPTransaction<SuppliesDB, ArrayLike<StoreNames<SuppliesDB>>, 'versionchange'>
+
+/**
+ * v1 → v2. 저장된 이력을 하나씩 셈 단위로 고쳐 쓴다.
+ *
+ * G5 — versionchange 트랜잭션은 await 사이에 자동 커밋된다. 여기서는 IDB 호출만 하고
+ * 그 밖의 비동기 작업을 끼워 넣지 않는다. 끼워 넣으면 앞부분만 옮겨진 채 커밋된다.
+ */
+async function toCountingUnitsInPlace(tx: UpgradeTx): Promise<void> {
+  const store = tx.objectStore('purchases')
+  let cursor = await store.openCursor()
+  while (cursor) {
+    const next = toCountingUnits(cursor.value)
+    if (next) await cursor.update(next)
+    cursor = await cursor.continue()
+  }
 }
 
 export const itemsRepo = {

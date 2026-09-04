@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { DBError } from '../lib/db'
 import { todayStr } from '../lib/format'
 import { formatBytes, processReceipt } from '../lib/receipt'
-import { ALL_UNITS } from '../lib/units'
+import { ALL_UNITS, groupOf } from '../lib/units'
 import { useData, type NewEntry } from '../state/DataContext'
 import type { ItemType, Unit } from '../types'
 import FormField, { controlClass, inputClass, inputErrorClass } from './FormField'
@@ -70,6 +70,8 @@ export default function ItemForm({ onDone }: { onDone: () => void }) {
   )
   const effectiveType = matchedItem?.type ?? values.type
   const isConsumable = effectiveType === 'consumable'
+  // 롤·장·개·팩은 낱개로 센다. 용량 칸에 적은 수가 곧 낱개 수라 정수여야 한다
+  const countsPieces = groupOf(values.unit) === 'count'
 
   function set<K extends keyof Values>(key: K, value: Values[K]) {
     setValues((prev) => ({ ...prev, [key]: value }))
@@ -104,6 +106,8 @@ export default function ItemForm({ onDone }: { onDone: () => void }) {
       const volume = parseNumber(values.volume)
       if (volume == null) next.volume = '1개당 용량을 입력해 주세요.'
       else if (volume <= 0) next.volume = '용량은 0보다 커야 해요.'
+      else if (countsPieces && !Number.isInteger(volume))
+        next.volume = `${values.unit} 단위는 정수로 입력해 주세요.`
     }
 
     return Object.keys(next).length > 0 ? next : null
@@ -214,7 +218,16 @@ export default function ItemForm({ onDone }: { onDone: () => void }) {
           </FormField>
 
           <div className="grid grid-cols-[1fr_auto] gap-2">
-            <FormField label="1개당 용량" required error={errors.volume}>
+            <FormField
+              label="1개당 용량"
+              required
+              error={errors.volume}
+              hint={
+                countsPieces
+                  ? `낱개로 세는 단위예요. 6${values.unit}짜리 한 묶음이면 6, 구매 개수는 1.`
+                  : undefined
+              }
+            >
               <input
                 type="number"
                 inputMode="decimal"

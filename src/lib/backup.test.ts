@@ -138,12 +138,21 @@ describe('행 단위 검증', () => {
     expect(result.parsed.skipped.purchases).toBe(1)
   })
 
-  it('remaining이 구매 개수를 넘으면 잘라낸다', () => {
+  it('remaining이 총 개수를 넘으면 잘라낸다', () => {
     const base = JSON.parse(file())
     base.purchases[0].remaining = 99
     const result = parseBackup(JSON.stringify(base))
     if (!result.ok) return
     expect(result.parsed.data.purchases[0].remaining).toBe(2)
+  })
+
+  it('낱개로 세는 단위는 상한이 총 낱개 수다', () => {
+    const base = JSON.parse(file())
+    // 6롤짜리 2팩 = 12롤
+    Object.assign(base.purchases[0], { volume: 6, unit: '롤', quantity: 2, remaining: 99 })
+    const result = parseBackup(JSON.stringify(base))
+    if (!result.ok) return
+    expect(result.parsed.data.purchases[0].remaining).toBe(12)
   })
 
   it('영수증이 없으면 hasReceipt를 내린다', () => {
@@ -162,6 +171,42 @@ describe('행 단위 검증', () => {
     if (!result.ok) return
     expect(result.parsed.data.receipts).toHaveLength(0)
     expect(result.parsed.skipped.receipts).toBe(1)
+  })
+})
+
+describe('v1 백업 읽기', () => {
+  /** v1은 남은 개수와 소진일을 포장 단위로 셌다 */
+  function v1(purchase: Record<string, unknown>) {
+    const base = JSON.parse(file())
+    base.version = 1
+    base.purchases = [{ ...base.purchases[0], ...purchase }]
+    return JSON.stringify(base)
+  }
+
+  it('예전 파일을 거절하지 않는다 — 거절하면 백업 구실을 못 한다', () => {
+    expect(parseBackup(v1({})).ok).toBe(true)
+  })
+
+  it('읽으면서 셈 단위로 옮긴다', () => {
+    const result = parseBackup(v1({ volume: 6, unit: '롤', quantity: 1, remaining: 1 }))
+    if (!result.ok) return
+
+    expect(result.parsed.data.purchases[0].remaining).toBe(6)
+    // 다시 내보낼 때는 최신 버전으로 적는다
+    expect(result.parsed.data.version).toBe(BACKUP_VERSION)
+  })
+
+  it('v1의 남은 개수 상한은 총 낱개 수가 아니라 구매 개수다', () => {
+    // v1 파일의 remaining 3은 "3팩"이라는 뜻이다. 12롤로 읽으면 안 된다
+    const result = parseBackup(v1({ volume: 6, unit: '롤', quantity: 2, remaining: 3 }))
+    if (!result.ok) return
+    expect(result.parsed.data.purchases[0].remaining).toBe(12) // 2팩으로 잘린 뒤 × 6
+  })
+
+  it('L·kg 이력은 원래대로 둔다', () => {
+    const result = parseBackup(v1({ volume: 3, unit: 'L', quantity: 2, remaining: 1 }))
+    if (!result.ok) return
+    expect(result.parsed.data.purchases[0].remaining).toBe(1)
   })
 })
 

@@ -30,6 +30,18 @@ function purchase(over: Partial<Purchase> = {}): Purchase {
   }
 }
 
+/** 6롤짜리 1팩. 낱개로 세는 단위가 어떻게 계산되는지 보는 표본 */
+function rolls(over: Partial<Purchase> = {}): Purchase {
+  return purchase({
+    purchaseDate: '2025-01-01',
+    volume: 6,
+    unit: '롤',
+    quantity: 1,
+    remaining: 6,
+    ...over,
+  })
+}
+
 /** 로컬 자정 Date. new Date('...')은 UTC 파싱이라 쓰지 않는다 (G1) */
 function day(iso: string): Date {
   const [y, m, d] = iso.split('-').map(Number)
@@ -128,6 +140,22 @@ describe('2-2 용량당 주기', () => {
     expect(perVolume.label).toBe('3L당')
   })
 
+  it('낱개로 세는 단위는 용량으로 한 번 더 나누지 않는다', () => {
+    // 6롤짜리 1팩. 롤 하나를 5일씩 썼다
+    const ps = [rolls({ depletionDates: ['2025-01-06', '2025-01-11', '2025-01-16'], remaining: 3 })]
+
+    // 표본의 days가 이미 "1롤당"이다. 여기서 6으로 또 나누면 0.83일/롤이 된다
+    expect(avgDaysPerUnit(ps)).toBeCloseTo(5)
+    expect(avgDaysPerStandardVolume(ps)).toBeCloseTo(5)
+
+    const [perUnit, perVolume, perStandard] = cycleOptions(ps)
+    expect(perUnit.label).toBe('1롤당')
+    expect(perUnit.days).toBeCloseTo(5)
+    expect(perVolume.label).toBe('6롤당')
+    expect(perVolume.days).toBeCloseTo(30) // 한 팩을 다 쓰는 데 30일
+    expect(perStandard.label).toBe('1롤당')
+  })
+
   it('환산할 수 없는 단위가 섞이면 용량 토글이 꺼진다', () => {
     const ps = [
       purchase({ purchaseDate: '2025-01-01', depletionDates: ['2025-01-31'], volume: 3, unit: 'L' }),
@@ -189,6 +217,14 @@ describe('G0 개봉 시점', () => {
     expect(stockEvents(ps)).toEqual([
       { date: '2025-01-01', delta: 1 },
       { date: '2025-01-01', delta: -1 },
+    ])
+  })
+
+  it('구매는 총 개수만큼 재고를 올린다 — 6롤짜리 1팩은 +6', () => {
+    const ps = [rolls({ depletionDates: ['2025-01-06'], remaining: 5 })]
+    expect(stockEvents(ps)).toEqual([
+      { date: '2025-01-01', delta: 6 },
+      { date: '2025-01-06', delta: -1 },
     ])
   })
 
@@ -265,6 +301,17 @@ describe('2-4 소진 예측', () => {
     expect(result.status).toBe('soon')
   })
 
+  it('남은 개수만큼 곱해서 재고 전체가 떨어질 날을 잡는다', () => {
+    // 1롤에 5일, 01-06에 첫 롤을 끝내고 5롤이 남았다 → 5 × 5 = 25일 뒤
+    const ps = [rolls({ depletionDates: ['2025-01-06'], remaining: 5 })]
+    const result = predictDepletion(ps, day('2025-01-07'))
+
+    expect(result.expectedDate).toBe('2025-01-31')
+    // 지금 쓰는 롤만 봤다면 5일 뒤가 되어, 5롤이 남았는데도 "곧 소진"이 떴을 것이다
+    expect(result.status).toBe('ok')
+    expect(result.daysLeft).toBe(24)
+  })
+
   it('재고 0은 데이터가 있어도 outOfStock이 먼저다 (A7)', () => {
     const result = predictDepletion(consumable('2025-03-02', 0), day('2025-03-07'))
     expect(result.status).toBe('outOfStock')
@@ -293,6 +340,11 @@ describe('A9 남은 개수 표기', () => {
       { label: '개', count: 3 },
       { label: '롤', count: 2 },
     ])
+  })
+
+  it('6롤짜리 1팩에서 1롤을 쓰면 5롤이 남는다', () => {
+    // 팩 단위로 셌다면 여기서 "1롤"이 나왔다
+    expect(totalRemaining([rolls({ remaining: 5 })])).toEqual([{ label: '롤', count: 5 }])
   })
 
   it('같은 세는 단위끼리는 합친다', () => {

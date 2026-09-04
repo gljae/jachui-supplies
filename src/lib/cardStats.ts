@@ -1,4 +1,4 @@
-import type { Purchase } from '../types'
+import type { Purchase, Unit } from '../types'
 import {
   avgDaysPerUnit,
   predictDepletion,
@@ -6,6 +6,7 @@ import {
   totalSpent,
   type DepletionResult,
 } from './calc'
+import { commonCountingUnit } from './units'
 
 /**
  * 카드와 정렬이 함께 쓰는 파생값.
@@ -17,6 +18,8 @@ import {
 export interface CardStats {
   remaining: { label: string; count: number }[]
   avgDays: number | null
+  /** avgDays를 세는 단위. "1롤당 5일"의 그 롤 */
+  countingUnit: Unit
   depletion: DepletionResult
   latest: Purchase | null
   spent: number
@@ -30,6 +33,8 @@ export function cardStats(purchases: Purchase[], today: Date): CardStats {
   return {
     remaining: totalRemaining(purchases),
     avgDays: avgDaysPerUnit(purchases),
+    // 단위가 섞이면 한 단어로 부를 수 없다. 그때만 뭉뚱그려 '개'라고 한다
+    countingUnit: commonCountingUnit(purchases) ?? '개',
     depletion: predictDepletion(purchases, today),
     latest,
     spent: totalSpent(purchases),

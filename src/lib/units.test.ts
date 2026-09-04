@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Purchase } from '../types'
 import {
+  commonCountingUnit,
   countingUnitOf,
   fromStandard,
   groupOf,
@@ -8,6 +9,8 @@ import {
   standardUnitOf,
   standardUnitsOf,
   toStandard,
+  totalUnitsOf,
+  unitsPerPack,
 } from './units'
 
 function purchase(over: Partial<Purchase> = {}): Purchase {
@@ -77,6 +80,55 @@ describe('단위 혼재 판정', () => {
   it('용량 없는 이력(일회성)은 무시한다', () => {
     const ps = [purchase({ volume: 3, unit: 'L' }), purchase()]
     expect(isMixedUnit(ps)).toBe(false)
+  })
+})
+
+describe('한 포장에 든 개수', () => {
+  it('count 단위는 용량이 곧 낱개 수다', () => {
+    expect(unitsPerPack({ volume: 6, unit: '롤' })).toBe(6)
+    expect(unitsPerPack({ volume: 100, unit: '장' })).toBe(100)
+  })
+
+  it('volume/weight는 포장 자체가 1개다 — 3L를 나눠 쓸 수는 없다', () => {
+    expect(unitsPerPack({ volume: 3, unit: 'L' })).toBe(1)
+    expect(unitsPerPack({ volume: 1.5, unit: 'kg' })).toBe(1)
+  })
+
+  it('용량이나 단위가 없으면 1개다', () => {
+    expect(unitsPerPack({})).toBe(1)
+    expect(unitsPerPack({ volume: 6 })).toBe(1)
+  })
+
+  it('G3 — 0이나 음수 같은 값이 와도 최소 1개는 보장한다', () => {
+    expect(unitsPerPack({ volume: 0, unit: '롤' })).toBe(1)
+    expect(unitsPerPack({ volume: -3, unit: '롤' })).toBe(1)
+    expect(unitsPerPack({ volume: Number.NaN, unit: '롤' })).toBe(1)
+  })
+
+  it('총 개수는 포장 개수 × 포장당 개수다', () => {
+    // 6롤짜리 2팩 = 12롤
+    expect(totalUnitsOf({ volume: 6, unit: '롤', quantity: 2 })).toBe(12)
+    // 3L짜리 2통 = 2개
+    expect(totalUnitsOf({ volume: 3, unit: 'L', quantity: 2 })).toBe(2)
+    // 용량 없는 일회성
+    expect(totalUnitsOf({ quantity: 1 })).toBe(1)
+  })
+})
+
+describe('공통 셈 단위', () => {
+  it('모두 같은 단위로 세면 그 단위', () => {
+    const ps = [purchase({ volume: 6, unit: '롤' }), purchase({ volume: 30, unit: '롤' })]
+    expect(commonCountingUnit(ps)).toBe('롤')
+  })
+
+  it('ml과 L은 둘 다 개로 세므로 하나로 모인다', () => {
+    const ps = [purchase({ volume: 500, unit: 'ml' }), purchase({ volume: 3, unit: 'L' })]
+    expect(commonCountingUnit(ps)).toBe('개')
+  })
+
+  it('롤과 L이 섞이면 한 단어로 부를 수 없다', () => {
+    const ps = [purchase({ volume: 6, unit: '롤' }), purchase({ volume: 3, unit: 'L' })]
+    expect(commonCountingUnit(ps)).toBeNull()
   })
 })
 

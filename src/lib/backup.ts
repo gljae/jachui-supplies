@@ -1,8 +1,16 @@
 import type { Item, ItemType, Purchase, Unit } from '../types'
-import { ALL_UNITS } from './units'
+import { toCountingUnits } from './migrate'
+import { ALL_UNITS, totalUnitsOf } from './units'
 
 export const BACKUP_SCHEMA = 'jachui-supplies-backup'
-export const BACKUP_VERSION = 1
+/** 2 — 남은 개수와 소진일을 포장 단위에서 셈 단위로 옮겼다 (migrate.ts) */
+export const BACKUP_VERSION = 2
+
+/**
+ * 읽어들일 수 있는 버전. 예전 파일을 거절하면 백업이 백업 구실을 못 한다.
+ * v1은 가져오면서 셈 단위로 옮긴다.
+ */
+const READABLE_VERSIONS = [1, 2]
 
 export interface BackupReceipt {
   purchaseId: string
@@ -92,7 +100,7 @@ function validItem(raw: unknown): Item | null {
  * G3 — 여기서 막지 않으면 0으로 나눈 Infinity가 평균 계산 전체를 오염시킨다.
  * 폼은 막고 있지만 가져오기는 남이 만든 파일을 받는 입구다.
  */
-function validPurchase(raw: unknown): Purchase | null {
+function validPurchase(raw: unknown, version: number): Purchase | null {
   if (!isRecord(raw)) return null
   if (!nonEmptyString(raw.id) || !nonEmptyString(raw.itemId)) return null
   if (typeof raw.purchaseDate !== 'string' || !DATE_PATTERN.test(raw.purchaseDate)) return null
@@ -101,11 +109,6 @@ function validPurchase(raw: unknown): Purchase | null {
   const price = Number(raw.price)
   if (!Number.isFinite(quantity) || quantity <= 0) return null
   if (!Number.isFinite(price) || price < 0) return null
-
-  const rawRemaining = Number(raw.remaining)
-  const remaining = Number.isFinite(rawRemaining)
-    ? Math.min(Math.max(rawRemaining, 0), quantity)
-    : quantity
 
   let volume: number | undefined
   let unit: Unit | undefined
@@ -116,6 +119,11 @@ function validPurchase(raw: unknown): Purchase | null {
     volume = parsed
     unit = raw.unit as Unit
   }
+
+  // v1은 남은 개수를 포장 단위로 셌다. 그 파일의 상한은 총 개수가 아니라 구매 개수다
+  const cap = version === 1 ? quantity : totalUnitsOf({ volume, unit, quantity })
+  const rawRemaining = Number(raw.remaining)
+  const remaining = Number.isFinite(rawRemaining) ? Math.min(Math.max(rawRemaining, 0), cap) : cap
 
   const depletionDates = Array.isArray(raw.depletionDates)
     ? raw.depletionDates.filter((d): d is string => typeof d === 'string' && DATE_PATTERN.test(d)).sort()
@@ -165,12 +173,13 @@ export function parseBackup(text: string): ParseResult {
   if (!isRecord(raw) || raw.schema !== BACKUP_SCHEMA) {
     return { ok: false, message: '이 앱에서 내보낸 파일이 아니에요.' }
   }
-  if (raw.version !== BACKUP_VERSION) {
+  if (typeof raw.version !== 'number' || !READABLE_VERSIONS.includes(raw.version)) {
     return {
       ok: false,
       message: `백업 버전이 달라요 (파일 v${String(raw.version)}, 앱 v${BACKUP_VERSION}). 앱을 최신으로 올린 뒤 다시 시도해 주세요.`,
     }
   }
+  const version = raw.version
   if (!Array.isArray(raw.items) || !Array.isArray(raw.purchases)) {
     return { ok: false, message: '파일 내용이 손상됐어요. 다른 백업 파일로 시도해 주세요.' }
   }
@@ -187,7 +196,9 @@ export function parseBackup(text: string): ParseResult {
   const purchases: Purchase[] = []
   let skippedPurchases = 0
   for (const candidate of raw.purchases) {
-    const purchase = validPurchase(candidate)
+    const parsed = validPurchase(candidate, version)
+    // v1 파일은 포장 단위로 세어 뒀다. 읽으면서 셈 단위로 옮긴다
+    const purchase = parsed && version === 1 ? (toCountingUnits(parsed) ?? parsed) : parsed
     // 품목이 없는 고아 이력은 버린다. 목록에도 통계에도 낄 자리가 없다
     if (purchase && itemIds.has(purchase.itemId)) purchases.push(purchase)
     else skippedPurchases++

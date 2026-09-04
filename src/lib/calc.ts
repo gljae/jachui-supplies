@@ -1,7 +1,15 @@
 import { addDays, differenceInCalendarDays } from 'date-fns'
 import type { Purchase, Unit } from '../types'
 import { formatUnitValue, parseDate, toDateStr } from './format'
-import { countingUnitOf, isMixedUnit, standardUnitOf, toStandard } from './units'
+import {
+  commonCountingUnit,
+  countingUnitOf,
+  isMixedUnit,
+  standardUnitOf,
+  toStandard,
+  totalUnitsOf,
+  unitsPerPack,
+} from './units'
 
 /**
  * 주기·소진일·단가 계산.
@@ -11,10 +19,10 @@ import { countingUnitOf, isMixedUnit, standardUnitOf, toStandard } from './units
  */
 
 export interface UsageSample {
-  /** 1개를 다 쓰는 데 걸린 일수 */
+  /** 셈 단위 1개를 다 쓰는 데 걸린 일수 */
   days: number
-  /** 그 1개의 용량(표준 단위 환산). 용량 정보가 없으면 null */
-  volumeStd: number | null
+  /** 그 1개에 담긴 용량(표준 단위 환산). 용량 정보가 없으면 null */
+  volumeStdPerUnit: number | null
 }
 
 function mean(values: number[]): number | null {
@@ -22,6 +30,7 @@ function mean(values: number[]): number | null {
   return values.reduce((sum, v) => sum + v, 0) / values.length
 }
 
+/** 포장 1개에 담긴 용량(표준 단위 환산) */
 function volumeStdOf(p: Purchase): number | null {
   if (p.volume == null || p.unit == null) return null
   const std = toStandard(p.volume, p.unit)
@@ -29,10 +38,25 @@ function volumeStdOf(p: Purchase): number | null {
   return Number.isFinite(std) && std > 0 ? std : null
 }
 
+/**
+ * 셈 단위 1개에 담긴 용량(표준 단위 환산).
+ *
+ * 6롤짜리 1팩은 롤 단위로 하나씩 쓰므로 1롤당 1롤이고,
+ * 3L짜리 1통은 통째로 쓰므로 1개당 3L다.
+ * 표본의 days도 셈 단위 기준이라, 둘의 기준이 맞아야 "1L당 며칠"이 나온다.
+ */
+function volumeStdPerUnitOf(p: Purchase): number | null {
+  const std = volumeStdOf(p)
+  if (std == null) return null
+  const perUnit = std / unitsPerPack(p)
+  return Number.isFinite(perUnit) && perUnit > 0 ? perUnit : null
+}
+
 // ─── 2-1. 1개당 실사용 일수 ────────────────────────────────────────────────
 
 /**
- * 이력 1건에서 "1개를 다 쓰는 데 걸린 일수" 표본을 뽑는다.
+ * 이력 1건에서 "셈 단위 1개를 다 쓰는 데 걸린 일수" 표본을 뽑는다.
+ * 여기서 1개는 롤·장처럼 낱개로 쓰는 단위면 그 낱개, 3L짜리 통이면 통 하나다.
  * 첫 소진은 구매일부터, 이후는 직전 소진일부터 잰다.
  *
  * 0일 표본은 버린다(G3). 같은 날 사서 같은 날 소진 처리한 것은 하루 미만인지
@@ -56,8 +80,8 @@ export function usageGaps(p: Purchase): number[] {
 
 export function usageSamples(purchases: Purchase[]): UsageSample[] {
   return purchases.flatMap((p) => {
-    const volumeStd = volumeStdOf(p)
-    return usageGaps(p).map((days) => ({ days, volumeStd }))
+    const volumeStdPerUnit = volumeStdPerUnitOf(p)
+    return usageGaps(p).map((days) => ({ days, volumeStdPerUnit }))
   })
 }
 
@@ -77,8 +101,8 @@ export function avgDaysPerStandardVolume(purchases: Purchase[]): number | null {
   if (isMixedUnit(purchases)) return null
 
   const perVolume = usageSamples(purchases)
-    .filter((s) => s.volumeStd != null)
-    .map((s) => s.days / (s.volumeStd as number))
+    .filter((s) => s.volumeStdPerUnit != null)
+    .map((s) => s.days / (s.volumeStdPerUnit as number))
 
   return mean(perVolume)
 }
@@ -111,13 +135,15 @@ export function cycleOptions(purchases: Purchase[]): CycleOption[] {
 
   const standardUnit: Unit | null = rep?.unit ? standardUnitOf(rep.unit) : null
   const repVolumeStd = rep ? volumeStdOf(rep) : null
+  // 셈 단위가 섞이면 한 단어로 부를 수 없다. 그때만 뭉뚱그려 '개'라고 한다
+  const counting = commonCountingUnit(purchases) ?? '개'
 
   return [
     {
       mode: 'perUnit',
       enabled: perUnitDays != null,
       days: perUnitDays,
-      label: '1개당',
+      label: `1${counting}당`,
     },
     {
       mode: 'perVolume',
@@ -152,7 +178,7 @@ export function avgPurchaseIntervalDays(purchases: Purchase[]): number | null {
 
 export interface StockEvent {
   date: string
-  /** 구매는 +quantity, 소진은 -1 */
+  /** 구매는 +총 개수(셈 단위), 소진은 -1 */
   delta: number
 }
 
@@ -165,7 +191,7 @@ export function stockEvents(purchases: Purchase[]): StockEvent[] {
   const events: (StockEvent & { order: number })[] = []
 
   for (const p of purchases) {
-    events.push({ date: p.purchaseDate, delta: p.quantity, order: 0 })
+    events.push({ date: p.purchaseDate, delta: totalUnitsOf(p), order: 0 })
     for (const date of p.depletionDates) {
       events.push({ date, delta: -1, order: 1 })
     }
@@ -225,7 +251,10 @@ export function predictDepletion(purchases: Purchase[], today: Date): DepletionR
     return { status: 'collecting', expectedDate: null, daysLeft: null }
   }
 
-  const expected = addDays(parseDate(openedAt), Math.round(avg))
+  // 남은 재고 전체가 떨어지는 날. 개봉 시점은 지금 쓰고 있는 하나가 시작된 날이고
+  // remaining은 그 하나까지 포함하므로, 곱하면 마지막 하나가 끝나는 날이 된다.
+  // 지금 쓰는 하나만 보면 6롤 중 1롤을 쓰는 중일 때 5롤이 남았는데도 "곧 소진"이 뜬다.
+  const expected = addDays(parseDate(openedAt), Math.round(avg * remaining))
   const daysLeft = differenceInCalendarDays(expected, today)
 
   return {
@@ -240,6 +269,7 @@ export function predictDepletion(purchases: Purchase[], today: Date): DepletionR
 /**
  * A9 — 남은 개수를 세는 단위별로 묶는다.
  * count 단위는 그 단위로(2롤), volume/weight는 포장 단위인 '개'로 센다(3개).
+ * remaining 자체가 셈 단위라, 6롤짜리 1팩에서 1롤을 썼으면 여기서 5롤이 나온다.
  * 0인 묶음은 빼므로, 재고가 전혀 없으면 빈 배열이 된다.
  */
 export function totalRemaining(purchases: Purchase[]): { label: Unit; count: number }[] {
