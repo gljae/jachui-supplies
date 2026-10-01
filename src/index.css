@@ -27,4 +27,15 @@
   button {
     @apply cursor-pointer;
   }
+
+  /*
+   * recharts 3은 키보드 탐색용으로 차트 svg에 tabindex="0"을 붙인다.
+   * 그래서 그래프를 탭하면 svg가 포커스를 받고 브라우저 기본 포커스 링이 테두리처럼 그려진다.
+   * 키보드로 옮겨 다닐 때는 툴팁이 따라 움직이므로 링이 없어도 위치를 알 수 있다.
+   */
+  .recharts-wrapper,
+  .recharts-surface {
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
+  }
 }
